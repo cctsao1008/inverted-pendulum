@@ -6,4 +6,21 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
-add_subdirectory(platform/stm32f103)
+option(BUILD_STM32_FIRMWARE
+       "Build STM32F103 firmware"
+       ON)
+
+option(BUILD_HOST_TESTS
+       "Build host-side unit tests"
+       OFF)
+
+add_subdirectory(control)
+
+if(BUILD_STM32_FIRMWARE)
+    add_subdirectory(platform/stm32f103)
+endif()
+
+if(BUILD_HOST_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

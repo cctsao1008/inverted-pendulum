@@ -71,6 +71,7 @@ target_link_options(${TARGET_NAME} PRIVATE
 )
 
 target_link_libraries(${TARGET_NAME} PRIVATE
+    control_core
     ${LIBOPENCM3_LIBRARY}
 )
 
