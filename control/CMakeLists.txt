@@ -1,6 +1,7 @@
 add_library(control_core STATIC
     control_config.c
     safety_manager.c
+    state_estimator.c
 )
 
 target_include_directories(control_core PUBLIC

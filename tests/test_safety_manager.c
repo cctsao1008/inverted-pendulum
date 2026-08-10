@@ -16,6 +16,7 @@ static control_config_t make_valid_config(void)
     config.capture_angle_rad = 0.10F;
     config.escape_angle_rad = 0.35F;
     config.max_normalized_output = 0.80F;
+    config.rate_filter_alpha = 0.25F;
 
     config.balance_gain[0] = 1.0F;
     config.balance_gain[1] = 1.0F;

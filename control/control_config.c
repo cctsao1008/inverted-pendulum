@@ -24,6 +24,7 @@ void control_config_init_invalid(control_config_t *config)
     config->capture_angle_rad = 0.0F;
     config->escape_angle_rad = 0.0F;
     config->max_normalized_output = 0.0F;
+    config->rate_filter_alpha = 0.0F;
 
     for (index = 0U; index < 4U; index++) {
         config->balance_gain[index] = 0.0F;
@@ -62,6 +63,13 @@ uint32_t control_config_validate(
         (config->max_normalized_output <= 0.0F) ||
         (config->max_normalized_output > 1.0F)) {
         errors |= CONTROL_CONFIG_ERROR_OUTPUT_LIMIT;
+    }
+
+    if (!control_value_is_finite(
+            config->rate_filter_alpha) ||
+        (config->rate_filter_alpha <= 0.0F) ||
+        (config->rate_filter_alpha > 1.0F)) {
+        errors |= CONTROL_CONFIG_ERROR_RATE_FILTER;
     }
 
     if (!config->balance_gains_configured) {

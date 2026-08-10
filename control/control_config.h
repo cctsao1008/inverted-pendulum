@@ -12,6 +12,7 @@ typedef struct {
     float capture_angle_rad;
     float escape_angle_rad;
     float max_normalized_output;
+    float rate_filter_alpha;
 
     /*
      * State order:
@@ -30,7 +31,8 @@ typedef enum {
     CONTROL_CONFIG_ERROR_SAMPLE_TIME  = (1U << 1),
     CONTROL_CONFIG_ERROR_ANGLE_WINDOW = (1U << 2),
     CONTROL_CONFIG_ERROR_OUTPUT_LIMIT = (1U << 3),
-    CONTROL_CONFIG_ERROR_BALANCE_GAIN = (1U << 4)
+    CONTROL_CONFIG_ERROR_BALANCE_GAIN = (1U << 4),
+    CONTROL_CONFIG_ERROR_RATE_FILTER  = (1U << 5)
 } control_config_error_t;
 
 void control_config_init_invalid(control_config_t *config);

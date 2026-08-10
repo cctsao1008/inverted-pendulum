@@ -37,3 +37,24 @@ add_test(
     NAME safety_manager
     COMMAND test_safety_manager
 )
+
+add_executable(test_state_estimator
+    test_state_estimator.c
+)
+
+target_link_libraries(test_state_estimator PRIVATE
+    control_core
+    m
+)
+
+target_compile_options(test_state_estimator PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME state_estimator
+    COMMAND test_state_estimator
+)
