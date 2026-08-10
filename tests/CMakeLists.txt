@@ -58,3 +58,24 @@ add_test(
     NAME state_estimator
     COMMAND test_state_estimator
 )
+
+add_executable(test_balance_controller
+    test_balance_controller.c
+)
+
+target_link_libraries(test_balance_controller PRIVATE
+    control_core
+    m
+)
+
+target_compile_options(test_balance_controller PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME balance_controller
+    COMMAND test_balance_controller
+)
