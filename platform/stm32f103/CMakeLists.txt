@@ -21,8 +21,12 @@ add_custom_target(libopencm3_stm32f1_build
 
 add_executable(${TARGET_NAME}
     ${PROJECT_SOURCE_DIR}/app/main.c
+    ${PLATFORM_DIR}/board/board_adc.c
     ${PLATFORM_DIR}/board/board_clock.c
+    ${PLATFORM_DIR}/board/board_encoder.c
     ${PLATFORM_DIR}/board/board_led.c
+    ${PLATFORM_DIR}/board/board_profile.c
+    ${PLATFORM_DIR}/board/board_time.c
     ${PLATFORM_DIR}/board/board_uart.c
 )
 
