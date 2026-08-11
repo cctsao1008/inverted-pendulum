@@ -146,6 +146,7 @@ add_test(
 add_executable(test_command_service
     test_command_service.c
     ${PROJECT_SOURCE_DIR}/app/command_service.c
+    ${PROJECT_SOURCE_DIR}/app/motion_observer.c
     ${PROJECT_SOURCE_DIR}/app/motor_test_service.c
     ${PROJECT_SOURCE_DIR}/app/runtime_parameters.c
     ${PROJECT_SOURCE_DIR}/app/telemetry_toggle.c
@@ -169,6 +170,7 @@ add_test(
 
 add_executable(test_motor_test_service
     test_motor_test_service.c
+    ${PROJECT_SOURCE_DIR}/app/motion_observer.c
     ${PROJECT_SOURCE_DIR}/app/motor_test_service.c
 )
 
@@ -186,4 +188,25 @@ target_compile_options(test_motor_test_service PRIVATE
 add_test(
     NAME motor_test_service
     COMMAND test_motor_test_service
+)
+
+add_executable(test_motion_observer
+    test_motion_observer.c
+    ${PROJECT_SOURCE_DIR}/app/motion_observer.c
+)
+
+target_include_directories(test_motion_observer PRIVATE
+    ${PROJECT_SOURCE_DIR}/app
+)
+
+target_compile_options(test_motion_observer PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME motion_observer
+    COMMAND test_motion_observer
 )

@@ -29,8 +29,8 @@ A schematic establishes intended connectivity, but it does not establish sensor 
 |---|---|---|
 | Pendulum-angle sensor | **PA7 / ADC1_IN7** | WDD35D4 potentiometer wiper input |
 | Battery-voltage sense | PA6 / ADC1_IN6 | 10 kΩ / 1 kΩ divider; nominal scale ratio 11:1 |
-| Arm encoder phase A | PB6 / TIM4_CH1 | Quadrature input |
-| Arm encoder phase B | PB7 / TIM4_CH2 | Quadrature input |
+| Arm encoder phase A | PA0 / TIM2_CH1 | A0 on the assembled six-pin connector |
+| Arm encoder phase B | PA1 / TIM2_CH2 | A1 on the assembled six-pin connector |
 | Motor B PWM | PB1 / TIM3_CH4 | TB6612 PWMB |
 | Motor B direction 1 | PB13 | TB6612 BIN1 |
 | Motor B direction 2 | PB12 | TB6612 BIN2 |
@@ -90,9 +90,18 @@ battery_voltage = adc_voltage * 11
 
 The actual scale and offset must be calibrated against a trusted meter before this value is used for protection or control decisions. Resistor tolerance, ADC reference accuracy, wiring drop, and board loading contribute error.
 
+The maintenance firmware reports the nominal measurement as `vbus_mV` in
+boot/status output and telemetry. It assumes VDDA = 3.300 V and supports a
+maximum nominal input of 36.3 V. This is diagnostic telemetry, not yet an
+undervoltage or overvoltage safety interlock.
+
 ## Encoder
 
-PB6 and PB7 connect to TIM4 channel 1 and channel 2 for quadrature decoding.
+The assembled six-pin motor/encoder connector labels the encoder phases A0 and
+A1. The vendor's complete pendulum firmware and standalone encoder test both
+initialize PA0/PA1 through TIM2 encoder mode. Physical motor testing separately
+confirmed that the motor output itself uses the D2 H-bridge channel; the motor
+and encoder therefore do not share the same timer/channel numbering.
 
 Pending physical verification:
 
@@ -102,15 +111,16 @@ Pending physical verification:
 - wrap handling
 - whether input pull or filtering changes are required on the assembled board
 
-The current firmware uses TIM4 encoder mode 3 and counts both phases (quadrature x4).
+The current firmware uses TIM2 encoder mode 3, counts both phases (quadrature
+x4), and applies the vendor example's input-filter setting of 10. TIM4 is used
+as the 1 MHz firmware timebase.
 
 ## Motor driver and safety implications
 
-The Forest D1 schematic uses Motor B of the TB6612 interface:
+The diagnostic firmware can select either Forest D1 motor connector:
 
-- PWMB: PB1 / TIM3_CH4
-- BIN1: PB13
-- BIN2: PB12
+- D1: PB0 / TIM3_CH3 PWM with PB14/PB15 direction
+- D2: PB1 / TIM3_CH4 PWM with PB13/PB12 direction
 - STBY: tied to 5 V
 
 Because STBY is not MCU-controlled, firmware cannot use it as an independent hardware shutdown. The motor interface must therefore be designed so that startup, reset, invalid state, and safety faults force:
@@ -122,8 +132,9 @@ Because STBY is not MCU-controlled, firmware cannot use it as an independent har
 The firmware now initializes this interface in a safe stopped state and exposes
 only a bounded maintenance test. It does not connect the balance controller to
 the motor. Each test requires an explicit arm, is limited to 20% duty and 2 s,
-then forces PWM to zero, drives BIN1/BIN2 low, and disarms. The arm latch also
-expires after 5 s if no test is started.
+then forces both PWM channels to zero, drives all four direction pins low, and
+disarms. Selecting D1 or D2 also stops and disarms before changing the active
+channel. The arm latch expires after 30 s if no test is started.
 
 ### Logic-level review point
 

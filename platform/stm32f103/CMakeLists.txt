@@ -22,6 +22,7 @@ add_custom_target(libopencm3_stm32f1_build
 add_executable(${TARGET_NAME}
     ${PROJECT_SOURCE_DIR}/app/command_service.c
     ${PROJECT_SOURCE_DIR}/app/main.c
+    ${PROJECT_SOURCE_DIR}/app/motion_observer.c
     ${PROJECT_SOURCE_DIR}/app/motor_test_service.c
     ${PROJECT_SOURCE_DIR}/app/pendulum_angle.c
     ${PROJECT_SOURCE_DIR}/app/runtime_parameters.c

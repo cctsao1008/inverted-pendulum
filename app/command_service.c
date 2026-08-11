@@ -7,8 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define COMMAND_MAX_ARGUMENTS 5U
-#define COMMAND_RESPONSE_CAPACITY 160U
+#define COMMAND_MAX_ARGUMENTS 6U
+#define COMMAND_RESPONSE_CAPACITY 256U
 
 static void write_response(
     command_service_t *service,
@@ -82,12 +82,34 @@ static bool parse_int32(const char *text, int32_t *value)
     return true;
 }
 
+static const char *motor_channel_io(const char *channel)
+{
+    return (strcmp(channel, "d1") == 0)
+        ? "PB0/TIM3_CH3+PB14/PB15"
+        : "PB1/TIM3_CH4+PB13/PB12";
+}
+
+static const char *motor_pattern_name(motor_pattern_t pattern)
+{
+    if (pattern == MOTOR_PATTERN_RIGHT) {
+        return "right";
+    }
+    if (pattern == MOTOR_PATTERN_LEFT) {
+        return "left";
+    }
+    if (pattern == MOTOR_PATTERN_BOTH) {
+        return "both";
+    }
+    return "none";
+}
+
 static void execute_status(command_service_t *service)
 {
     write_response(
         service,
         "[OK] motor=%s armed=%u arm_remaining_ms=%u output_pct=%d "
-        "remaining_ms=%u "
+        "remaining_ms=%u pattern=%s "
+        "channel=%s io=%s vbus_mV=%lu "
         "transport=text telemetry=%s rate_hz=%u param_dirty=%u "
         "persistence=unavailable\n",
         motor_test_service_is_active(service->motor)
@@ -97,6 +119,11 @@ static void execute_status(command_service_t *service)
         (unsigned int)motor_test_service_arm_remaining_ms(service->motor),
         (int)motor_test_service_percent(service->motor),
         (unsigned int)motor_test_service_remaining_ms(service->motor),
+        motor_pattern_name(motor_test_service_pattern(service->motor)),
+        service->get_motor_channel(service->motor_channel_context),
+        motor_channel_io(
+            service->get_motor_channel(service->motor_channel_context)),
+        (unsigned long)service->read_vbus_mv(service->vbus_context),
         telemetry_toggle_is_enabled(service->telemetry)
             ? "on"
             : "off",
@@ -118,8 +145,8 @@ static void execute_motor(
         write_response(
             service,
             "[OK] motor=%s armed=%u arm_remaining_ms=%u output_pct=%d "
-            "remaining_ms=%u "
-            "limit_pct=%u duration_ms=%u..%u\n",
+            "remaining_ms=%u pattern=%s "
+            "channel=%s io=%s vbus_mV=%lu limit_pct=%u duration_ms=%u..%u\n",
             motor_test_service_is_active(service->motor)
                 ? "test-active"
                 : "stopped",
@@ -128,9 +155,36 @@ static void execute_motor(
                 motor_test_service_arm_remaining_ms(service->motor),
             (int)motor_test_service_percent(service->motor),
             (unsigned int)motor_test_service_remaining_ms(service->motor),
+            motor_pattern_name(motor_test_service_pattern(service->motor)),
+            service->get_motor_channel(service->motor_channel_context),
+            motor_channel_io(
+                service->get_motor_channel(service->motor_channel_context)),
+            (unsigned long)service->read_vbus_mv(service->vbus_context),
             (unsigned int)MOTOR_TEST_MAX_PERCENT,
             (unsigned int)MOTOR_TEST_MIN_DURATION_MS,
             (unsigned int)MOTOR_TEST_MAX_DURATION_MS);
+        return;
+    }
+
+    if ((count == 3U) &&
+        (strcmp(arguments[1], "channel") == 0)) {
+        /* A channel change always stops and disarms before touching GPIO. */
+        motor_test_service_disarm(service->motor);
+
+        if (service->set_motor_channel(
+                arguments[2],
+                service->motor_channel_context)) {
+            write_response(
+                service,
+                "[OK] motor channel=%s stopped=1 armed=0; %s\n",
+                service->get_motor_channel(
+                    service->motor_channel_context),
+                motor_channel_io(arguments[2]));
+        } else {
+            write_response(
+                service,
+                "[ERR] motor channel must be d1 or d2; motor stopped and disarmed\n");
+        }
         return;
     }
 
@@ -140,7 +194,10 @@ static void execute_motor(
             write_response(
                 service,
                 "[OK] motor armed for one bounded test; expires in %u ms; "
-                "use motor test <signed_pct> <duration_ms>\n",
+                "use motor test <signed_pct> <duration_ms> or motor pattern "
+                "right|left|both, motor identify, or motor characterize "
+                "right|left, motor response right|left <pct> <ms>, or motor "
+                "brake-response right|left <drive_pct> <ms> <brake_pct>\n",
                 (unsigned int)MOTOR_TEST_ARM_WINDOW_MS);
         } else {
             write_response(service, "[ERR] motor test already active\n");
@@ -155,6 +212,222 @@ static void execute_motor(
         write_response(
             service,
             "[OK] motor stopped output_pct=0 armed=0\n");
+        return;
+    }
+
+    if ((count == 2U) &&
+        (strcmp(arguments[1], "identify") == 0)) {
+        result = motor_test_service_start_identify(service->motor);
+        if (result == MOTOR_TEST_OK) {
+            write_response(
+                service,
+                "[OK] motor identify active; channel=%s "
+                "pulse=+%u%%/%lums retry=+%u%%/%lums "
+                "min_delta=%d; output_applied=1\n",
+                service->get_motor_channel(
+                    service->motor_channel_context),
+                (unsigned int)MOTOR_IDENTIFY_FIRST_PERCENT,
+                (unsigned long)MOTOR_IDENTIFY_DRIVE_MS,
+                (unsigned int)MOTOR_IDENTIFY_RETRY_PERCENT,
+                (unsigned long)MOTOR_IDENTIFY_DRIVE_MS,
+                (int)MOTOR_IDENTIFY_MIN_DELTA_COUNTS);
+            return;
+        }
+
+        motor_test_service_disarm(service->motor);
+        write_response(
+            service,
+            (result == MOTOR_TEST_NOT_ARMED)
+                ? "[ERR] motor is not armed\n"
+                : "[ERR] motor operation already active\n");
+        return;
+    }
+
+    if ((count == 3U) &&
+        (strcmp(arguments[1], "characterize") == 0)) {
+        int8_t direction = 0;
+
+        if (strcmp(arguments[2], "right") == 0) {
+            direction = 1;
+        } else if (strcmp(arguments[2], "left") == 0) {
+            direction = -1;
+        }
+
+        if (direction == 0) {
+            motor_test_service_disarm(service->motor);
+            write_response(
+                service,
+                "[ERR] motor characterize direction must be right or left; "
+                "motor stopped and disarmed\n");
+            return;
+        }
+
+        result = motor_test_service_start_characterize(
+            service->motor, direction);
+        if (result == MOTOR_TEST_OK) {
+            write_response(
+                service,
+                "[OK] motor characterize direction=%s active; "
+                "ramp=%u..%u%% step=%u%%/%lums fall=1%%/%lums "
+                "window=%lums timeout=%lums; output_applied=1\n",
+                arguments[2],
+                (unsigned int)MOTOR_CHARACTERIZE_START_PERCENT,
+                (unsigned int)MOTOR_CHARACTERIZE_MAX_PERCENT,
+                (unsigned int)MOTOR_CHARACTERIZE_RAMP_STEP_PERCENT,
+                (unsigned long)MOTOR_CHARACTERIZE_RISE_STEP_MS,
+                (unsigned long)MOTOR_CHARACTERIZE_FALL_STEP_MS,
+                (unsigned long)MOTOR_CHARACTERIZE_WINDOW_MS,
+                (unsigned long)MOTOR_CHARACTERIZE_TIMEOUT_MS);
+            return;
+        }
+
+        motor_test_service_disarm(service->motor);
+        write_response(
+            service,
+            (result == MOTOR_TEST_NOT_ARMED)
+                ? "[ERR] motor is not armed\n"
+                : "[ERR] motor operation already active\n");
+        return;
+    }
+
+    if ((count == 5U) &&
+        (strcmp(arguments[1], "response") == 0)) {
+        int8_t direction = 0;
+
+        if (strcmp(arguments[2], "right") == 0) {
+            direction = 1;
+        } else if (strcmp(arguments[2], "left") == 0) {
+            direction = -1;
+        }
+        if ((direction == 0) ||
+            !parse_int32(arguments[3], &percent) ||
+            !parse_int32(arguments[4], &duration_ms) ||
+            (duration_ms < 0)) {
+            motor_test_service_disarm(service->motor);
+            write_response(
+                service,
+                "[ERR] usage: motor response right|left <%u..%u> "
+                "<%u..%u ms>; motor stopped and disarmed\n",
+                (unsigned int)MOTOR_RESPONSE_MIN_PERCENT,
+                (unsigned int)MOTOR_RESPONSE_MAX_PERCENT,
+                (unsigned int)MOTOR_RESPONSE_MIN_DRIVE_MS,
+                (unsigned int)MOTOR_RESPONSE_MAX_DRIVE_MS);
+            return;
+        }
+
+        result = motor_test_service_start_response(
+            service->motor, direction, percent, (uint32_t)duration_ms);
+        if (result == MOTOR_TEST_OK) {
+            write_response(
+                service,
+                "[OK] motor response direction=%s output_pct=%ld "
+                "drive_ms=%ld coast_timeout_ms=%lu window_ms=%lu "
+                "output_applied=1; auto-stop and auto-disarm enabled\n",
+                arguments[2],
+                (long)percent,
+                (long)duration_ms,
+                (unsigned long)MOTOR_RESPONSE_MAX_COAST_MS,
+                (unsigned long)MOTOR_RESPONSE_WINDOW_MS);
+            return;
+        }
+
+        motor_test_service_disarm(service->motor);
+        if (result == MOTOR_TEST_NOT_ARMED) {
+            write_response(service, "[ERR] motor is not armed\n");
+        } else if (result == MOTOR_TEST_ALREADY_ACTIVE) {
+            write_response(service, "[ERR] motor operation already active\n");
+        } else if (result == MOTOR_TEST_INVALID_PERCENT) {
+            write_response(
+                service, "[ERR] response percent must be %u..%u\n",
+                (unsigned int)MOTOR_RESPONSE_MIN_PERCENT,
+                (unsigned int)MOTOR_RESPONSE_MAX_PERCENT);
+        } else {
+            write_response(
+                service, "[ERR] response drive_ms must be %u..%u\n",
+                (unsigned int)MOTOR_RESPONSE_MIN_DRIVE_MS,
+                (unsigned int)MOTOR_RESPONSE_MAX_DRIVE_MS);
+        }
+        return;
+    }
+
+    if ((count == 6U) && (strcmp(arguments[1], "brake-response") == 0)) {
+        int8_t direction = 0;
+        int32_t brake_percent;
+        if (strcmp(service->get_motor_channel(service->motor_channel_context),
+                   "d2") != 0) {
+            motor_test_service_disarm(service->motor);
+            write_response(service, "[ERR] brake-response requires characterized channel d2; motor stopped and disarmed\n");
+            return;
+        }
+        if (strcmp(arguments[2], "right") == 0) direction = 1;
+        else if (strcmp(arguments[2], "left") == 0) direction = -1;
+        if ((direction == 0) || !parse_int32(arguments[3], &percent) ||
+            !parse_int32(arguments[4], &duration_ms) ||
+            !parse_int32(arguments[5], &brake_percent) || (duration_ms < 0)) {
+            motor_test_service_disarm(service->motor);
+            write_response(service, "[ERR] usage: motor brake-response right|left <30..80> <1000..10000 ms> <10..20>; motor stopped and disarmed\n");
+            return;
+        }
+        result = motor_test_service_start_brake_response(service->motor,
+            direction, percent, (uint32_t)duration_ms, brake_percent);
+        if (result == MOTOR_TEST_OK) {
+            write_response(service, "[OK] motor brake-response direction=%s drive_pct=%ld drive_ms=%ld brake_pct=%ld neutral_ms=%u brake_timeout_ms=%u settle_ms=%u output_applied=1; velocity-release and auto-disarm enabled\n",
+                arguments[2], (long)percent, (long)duration_ms,
+                (long)brake_percent, (unsigned int)MOTOR_BRAKE_NEUTRAL_MS,
+                (unsigned int)MOTOR_BRAKE_MAX_MS,
+                (unsigned int)MOTOR_BRAKE_SETTLE_MS);
+        } else {
+            motor_test_service_disarm(service->motor);
+            if (result == MOTOR_TEST_NOT_ARMED) write_response(service, "[ERR] motor is not armed\n");
+            else if (result == MOTOR_TEST_ALREADY_ACTIVE) write_response(service, "[ERR] motor operation already active\n");
+            else if (result == MOTOR_TEST_INVALID_PERCENT) write_response(service, "[ERR] drive percent must be 30..80 and brake percent 10..20\n");
+            else write_response(service, "[ERR] drive_ms must be 1000..10000\n");
+        }
+        return;
+    }
+
+    if ((count == 3U) &&
+        (strcmp(arguments[1], "pattern") == 0)) {
+        motor_pattern_t pattern = MOTOR_PATTERN_NONE;
+
+        if (strcmp(arguments[2], "right") == 0) {
+            pattern = MOTOR_PATTERN_RIGHT;
+        } else if (strcmp(arguments[2], "left") == 0) {
+            pattern = MOTOR_PATTERN_LEFT;
+        } else if (strcmp(arguments[2], "both") == 0) {
+            pattern = MOTOR_PATTERN_BOTH;
+        }
+
+        if (pattern == MOTOR_PATTERN_NONE) {
+            motor_test_service_disarm(service->motor);
+            write_response(
+                service,
+                "[ERR] motor pattern must be right, left, or both; "
+                "motor stopped and disarmed\n");
+            return;
+        }
+
+        result = motor_test_service_start_pattern(service->motor, pattern);
+        if (result == MOTOR_TEST_OK) {
+            write_response(
+                service,
+                "[OK] motor pattern=%s active; channel=%s "
+                "right=+%u%%/5000ms left=-%u%%/5000ms pause=1000ms "
+                "output_applied=1; auto-stop and auto-disarm enabled\n",
+                motor_pattern_name(pattern),
+                service->get_motor_channel(
+                    service->motor_channel_context),
+                (unsigned int)MOTOR_PATTERN_PERCENT,
+                (unsigned int)MOTOR_PATTERN_PERCENT);
+            return;
+        }
+
+        motor_test_service_disarm(service->motor);
+        write_response(
+            service,
+            (result == MOTOR_TEST_NOT_ARMED)
+                ? "[ERR] motor is not armed\n"
+                : "[ERR] motor test already active\n");
         return;
     }
 
@@ -180,9 +453,14 @@ static void execute_motor(
             write_response(
                 service,
                 "[OK] motor test active output_pct=%ld duration_ms=%ld; "
+                "channel=%s output_applied=1 vbus_mV=%lu; "
                 "auto-stop and auto-disarm enabled\n",
                 (long)percent,
-                (long)duration_ms);
+                (long)duration_ms,
+                service->get_motor_channel(
+                    service->motor_channel_context),
+                (unsigned long)
+                    service->read_vbus_mv(service->vbus_context));
             return;
         }
 
@@ -211,8 +489,10 @@ static void execute_motor(
 
     write_response(
         service,
-        "[ERR] usage: motor status|arm|test <signed_pct> "
-        "<duration_ms>|stop|disarm\n");
+        "[ERR] usage: motor status|channel d1|d2|arm|identify|characterize "
+        "right|left|response right|left <pct> <ms>|brake-response "
+        "right|left <drive_pct> <ms> <brake_pct>|test "
+        "<signed_pct> <duration_ms>|pattern right|left|both|stop|disarm\n");
 }
 
 static void execute_telemetry(
@@ -418,12 +698,22 @@ void command_service_init(
     runtime_parameters_t *parameters,
     telemetry_toggle_t *telemetry,
     motor_test_service_t *motor,
+    command_service_read_vbus_mv_fn read_vbus_mv,
+    void *vbus_context,
+    command_service_get_motor_channel_fn get_motor_channel,
+    command_service_set_motor_channel_fn set_motor_channel,
+    void *motor_channel_context,
     command_service_write_fn write,
     void *write_context)
 {
     service->parameters = parameters;
     service->telemetry = telemetry;
     service->motor = motor;
+    service->read_vbus_mv = read_vbus_mv;
+    service->vbus_context = vbus_context;
+    service->get_motor_channel = get_motor_channel;
+    service->set_motor_channel = set_motor_channel;
+    service->motor_channel_context = motor_channel_context;
     service->write = write;
     service->write_context = write_context;
     service->length = 0U;

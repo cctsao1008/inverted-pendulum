@@ -13,10 +13,21 @@ typedef void (*command_service_write_fn)(
     const char *text,
     void *context);
 
+typedef uint32_t (*command_service_read_vbus_mv_fn)(void *context);
+typedef const char *(*command_service_get_motor_channel_fn)(void *context);
+typedef bool (*command_service_set_motor_channel_fn)(
+    const char *channel,
+    void *context);
+
 typedef struct {
     runtime_parameters_t *parameters;
     telemetry_toggle_t *telemetry;
     motor_test_service_t *motor;
+    command_service_read_vbus_mv_fn read_vbus_mv;
+    void *vbus_context;
+    command_service_get_motor_channel_fn get_motor_channel;
+    command_service_set_motor_channel_fn set_motor_channel;
+    void *motor_channel_context;
     command_service_write_fn write;
     void *write_context;
     char line[COMMAND_SERVICE_LINE_CAPACITY];
@@ -29,6 +40,11 @@ void command_service_init(
     runtime_parameters_t *parameters,
     telemetry_toggle_t *telemetry,
     motor_test_service_t *motor,
+    command_service_read_vbus_mv_fn read_vbus_mv,
+    void *vbus_context,
+    command_service_get_motor_channel_fn get_motor_channel,
+    command_service_set_motor_channel_fn set_motor_channel,
+    void *motor_channel_context,
     command_service_write_fn write,
     void *write_context);
 
