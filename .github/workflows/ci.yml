@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-tests:
+    name: Host tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes cmake ninja-build build-essential
+
+      - name: Configure host tests
+        run: |
+          cmake -S . -B build/host -G Ninja \
+            -DBUILD_STM32_FIRMWARE=OFF \
+            -DBUILD_HOST_TESTS=ON
+
+      - name: Build host tests
+        run: cmake --build build/host
+
+      - name: Run host tests
+        run: ctest --test-dir build/host --output-on-failure
+
+  stm32f103-firmware:
+    name: STM32F103 firmware
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Arm build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            cmake \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            make \
+            ninja-build
+
+      - name: Configure STM32F103 firmware
+        run: |
+          cmake -S . -B build/stm32f103 -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-arm-none-eabi.cmake \
+            -DBUILD_STM32_FIRMWARE=ON \
+            -DBUILD_HOST_TESTS=OFF
+
+      - name: Build STM32F103 firmware
+        run: cmake --build build/stm32f103
+
+      - name: Verify firmware artifacts
+        run: |
+          test -s build/stm32f103/inverted-pendulum.elf
+          test -s build/stm32f103/inverted-pendulum.hex
+          test -s build/stm32f103/inverted-pendulum.bin
+          test -s build/stm32f103/inverted-pendulum.map
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: inverted-pendulum-stm32f103
+          path: |
+            build/stm32f103/inverted-pendulum.elf
+            build/stm32f103/inverted-pendulum.hex
+            build/stm32f103/inverted-pendulum.bin
+            build/stm32f103/inverted-pendulum.map
+          if-no-files-found: error
