@@ -2,10 +2,12 @@
 
 From-scratch embedded firmware and control software for a rotary inverted pendulum.
 
-The project currently uses the original **STM32F103C8T6** control-board form factor as the hardware baseline. Platform-independent control modules are developed and tested on the host before they are connected to real motor output.
+The project currently targets the original **Forest S1 STM32F103C8T6 controller plus Forest D1 baseboard (2016 revision)** as the hardware baseline. Platform-independent control modules are developed and tested on the host before they are connected to real motor output.
 
 > [!CAUTION]
 > The current firmware application is still **sensor-only**. Motor output is not initialized, and the balance controller is not yet connected to the real-time firmware loop. Keep motor power disconnected during initial bring-up and sensor verification.
+>
+> The 2016 Forest D1 schematic connects the pendulum sensor to **PA7 / ADC1_IN7**, but the current `main` firmware still configures **PA3 / ADC1_IN3**. Do not use the current ADC reading for control until this mismatch is corrected and verified on the physical unit.
 
 ## Current status
 
@@ -13,7 +15,8 @@ The `main` branch contains these foundations:
 
 - STM32F103C8T6 bring-up using [libopencm3](https://github.com/libopencm3/libopencm3)
 - 1 kHz firmware timing baseline
-- Pendulum ADC and arm quadrature-encoder acquisition
+- Sensor-acquisition framework; the pendulum ADC pin requires correction from PA3 to PA7
+- Arm quadrature-encoder acquisition
 - UART telemetry at 115200 baud
 - Control-loop timing profiling output
 - Platform-independent control configuration
@@ -30,17 +33,24 @@ The estimator, controller, and safety modules exist in `control/`, but `app/main
 
 Integrate acquisition, state estimation, safety decisions, and controller evaluation through a platform-independent pipeline while keeping physical motor output disabled until the interface and safety behavior are verified.
 
+Before V0.6 is connected to hardware, the PA7 pendulum ADC mapping, sensor zero, range, direction, encoder direction, and motor-interface polarity must be verified.
+
 ## Hardware baseline
 
-| Item | Current baseline |
+| Item | Forest S1 + Forest D1 (2016) baseline |
 |---|---|
 | MCU | STM32F103C8T6 |
 | Framework | Bare metal with libopencm3 |
+| MCU clock | 8 MHz HSE, 72 MHz system clock |
 | Control tick | 1 kHz |
-| Pendulum input | ADC1 channel 3 on PA3 |
+| Pendulum input | **PA7 / ADC1_IN7**; current `main` firmware still requires correction |
+| Battery voltage input | PA6 / ADC1_IN6 through a 10 kΩ / 1 kΩ divider |
 | Arm encoder | TIM4 quadrature input on PB6/PB7 |
-| Telemetry | USART1, 115200 baud, 100 Hz |
+| Telemetry | USART1 on PA9/PA10, 115200 baud, 100 Hz |
+| Motor B control | PB1 / TIM3_CH4 PWM, PB13 / BIN1, PB12 / BIN2 |
 | Motor output | Not initialized in the current application |
+
+See [Forest D1 2016 hardware baseline](docs/hardware/forest-d1-2016-baseline.md) for the schematic-derived pin map, revision boundary, electrical observations, firmware discrepancy, and physical validation checklist.
 
 The STM32F103C8T6 board remains the immediate baseline because it plugs directly into the existing driver board. A **Raspberry Pi Pico 2 / RP2350** port, including native USB HID and CDC, is a planned later platform and is not implemented on `main`.
 
@@ -50,6 +60,7 @@ The STM32F103C8T6 board remains the immediate baseline because it plugs directly
 app/                    STM32 firmware application
 cmake/                  Cross-compilation toolchain
 control/                Platform-independent estimator, safety, and control logic
+docs/hardware/          Schematic-derived hardware baselines and validation notes
 platform/stm32f103/     STM32F103 board support and linker configuration
 tests/                  Host-side unit tests
 third_party/libopencm3/ Git submodule
@@ -124,9 +135,10 @@ build/stm32f103/inverted-pendulum.map
 1. Keep motor power disconnected.
 2. Flash the STM32F103 firmware.
 3. Confirm the status LED and boot messages.
-4. Verify 100 Hz UART sensor telemetry.
-5. Check ADC range, encoder direction, zero offsets, and timing.
-6. Enable motor-related work only after sensor signs, scales, limits, and fail-closed behavior are confirmed.
+4. Correct the pendulum ADC mapping to PA7 / ADC1_IN7 in a dedicated firmware change.
+5. Verify 100 Hz UART sensor telemetry.
+6. Check ADC range, encoder direction, zero offsets, and timing.
+7. Enable motor-related work only after sensor signs, scales, limits, and fail-closed behavior are confirmed.
 
 ## Development principles
 
