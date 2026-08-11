@@ -241,23 +241,54 @@ int main(void)
 
                 if ((brake_state == MOTOR_BRAKE_DONE) ||
                     (brake_state == MOTOR_BRAKE_REVERSAL)) {
+                    const char *stop_reason =
+                        brake_state == MOTOR_BRAKE_DONE ? "stable" : "reversal";
+                    const char *direction =
+                        motor_test_service_brake_direction(&motor_test) > 0
+                            ? "right" : "left";
+                    int brake_drive_pct =
+                        (int)motor_test_service_brake_drive_percent(&motor_test);
+                    unsigned long brake_drive_ms =
+                        (unsigned long)motor_test_service_brake_drive_ms(&motor_test);
+                    int brake_pct =
+                        (int)motor_test_service_brake_percent(&motor_test);
+                    long drive_delta =
+                        (long)motor_test_service_brake_drive_delta(&motor_test);
+                    long cutoff_velocity =
+                        (long)motor_test_service_brake_cutoff_velocity_counts_s(&motor_test);
+                    long neutral_delta =
+                        (long)motor_test_service_brake_neutral_delta(&motor_test);
+                    long entry_velocity =
+                        (long)motor_test_service_brake_entry_velocity_counts_s(&motor_test);
+                    unsigned long brake_time_ms =
+                        (unsigned long)motor_test_service_brake_time_ms(&motor_test);
+                    long braking_delta =
+                        (long)motor_test_service_brake_delta(&motor_test);
+                    long release_velocity =
+                        (long)motor_test_service_brake_release_velocity_counts_s(&motor_test);
+                    long settling_delta =
+                        (long)motor_test_service_brake_settle_delta(&motor_test);
+                    long final_velocity =
+                        (long)motor_test_service_brake_final_velocity_counts_s(&motor_test);
+                    long peak_velocity =
+                        (long)motor_test_service_brake_peak_velocity_counts_s(&motor_test);
+                    unsigned long vbus_mV =
+                        (unsigned long)board_adc_read_vbus_millivolts();
+
                     printf("[MOTOR] brake-response complete stop_reason=%s direction=%s drive_pct=%d drive_ms=%lu brake_pct=%d drive_delta=%ld cutoff_velocity_counts_s=%ld neutral_delta=%ld brake_entry_velocity_counts_s=%ld brake_time_ms=%lu braking_delta=%ld release_velocity_counts_s=%ld settling_delta=%ld final_velocity_counts_s=%ld peak_velocity_counts_s=%ld output_pct=0 armed=0 vbus_mV=%lu\n",
-                           brake_state == MOTOR_BRAKE_DONE ? "stable" : "reversal",
-                           motor_test_service_brake_direction(&motor_test) > 0 ? "right" : "left",
-                           (int)motor_test_service_brake_drive_percent(&motor_test),
-                           (unsigned long)motor_test_service_brake_drive_ms(&motor_test),
-                           (int)motor_test_service_brake_percent(&motor_test),
-                           (long)motor_test_service_brake_drive_delta(&motor_test),
-                           (long)motor_test_service_brake_cutoff_velocity_counts_s(&motor_test),
-                           (long)motor_test_service_brake_neutral_delta(&motor_test),
-                           (long)motor_test_service_brake_entry_velocity_counts_s(&motor_test),
-                           (unsigned long)motor_test_service_brake_time_ms(&motor_test),
-                           (long)motor_test_service_brake_delta(&motor_test),
-                           (long)motor_test_service_brake_release_velocity_counts_s(&motor_test),
-                           (long)motor_test_service_brake_settle_delta(&motor_test),
-                           (long)motor_test_service_brake_final_velocity_counts_s(&motor_test),
-                           (long)motor_test_service_brake_peak_velocity_counts_s(&motor_test),
-                           (unsigned long)board_adc_read_vbus_millivolts());
+                           stop_reason, direction, brake_drive_pct,
+                           brake_drive_ms, brake_pct, drive_delta,
+                           cutoff_velocity, neutral_delta, entry_velocity,
+                           brake_time_ms, braking_delta, release_velocity,
+                           settling_delta, final_velocity, peak_velocity,
+                           vbus_mV);
+                    printf("[MOTOR_CSV] brake_response,%s,%s,%d,%lu,%d,%ld,%ld,%ld,%ld,%lu,%ld,%ld,%ld,%ld,%ld,%lu\n",
+                           stop_reason, direction, brake_drive_pct,
+                           brake_drive_ms, brake_pct, drive_delta,
+                           cutoff_velocity, neutral_delta, entry_velocity,
+                           brake_time_ms, braking_delta, release_velocity,
+                           settling_delta, final_velocity, peak_velocity,
+                           vbus_mV);
                 } else if ((brake_state == MOTOR_BRAKE_NO_MOTION) || (brake_state == MOTOR_BRAKE_ENCODER_IMPLAUSIBLE) || (brake_state == MOTOR_BRAKE_TIMEOUT)) {
                     const char *reason = brake_state == MOTOR_BRAKE_NO_MOTION ? "no-motion" : (brake_state == MOTOR_BRAKE_TIMEOUT ? "brake-timeout" : "encoder-implausible");
                     printf("[MOTOR] brake-response failed reason=%s direction=%s brake_pct=%d drive_delta=%ld braking_delta=%ld output_pct=0 armed=0 vbus_mV=%lu\n", reason,
