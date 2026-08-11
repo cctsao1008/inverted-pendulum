@@ -6,7 +6,7 @@
 
 #include "command_service.h"
 
-#define OUTPUT_CAPACITY 2048U
+#define OUTPUT_CAPACITY 4096U
 
 typedef struct {
     char text[OUTPUT_CAPACITY];
@@ -428,6 +428,107 @@ static void test_motor_brake_response_is_bounded_and_d2_only(void)
     assert(strstr(capture.text, "brake_pct=10") != NULL);
 }
 
+static void test_script_records_safe_lines_without_running_them(void)
+{
+    command_service_t service;
+    runtime_parameters_t parameters;
+    telemetry_toggle_t telemetry;
+    motor_test_service_t motor;
+    motor_capture_t motor_capture = {0};
+    output_capture_t capture = {{0}, 0U};
+
+    setup(&service, &parameters, &telemetry, &motor,
+          &motor_capture, &capture);
+
+    feed_text(&service,
+              "script begin\n"
+              "motor brake-response right 50 5000 10\n"
+              "wait 5000\n"
+              "motor brake-response left 50 5000 10\n"
+              "script end\n"
+              "script list\n");
+
+    assert(!motor_test_service_is_active(&motor));
+    assert(motor_capture.last_percent == 0);
+    assert(strstr(capture.text, "script stored lines=3") != NULL);
+    assert(strstr(capture.text, "[SCRIPT] 1: motor brake-response right 50 5000 10") != NULL);
+    assert(strstr(capture.text, "[SCRIPT] 2: wait 5000") != NULL);
+    assert(strstr(capture.text, "[SCRIPT] 3: motor brake-response left 50 5000 10") != NULL);
+}
+
+static void test_script_rejects_unsafe_recorded_lines(void)
+{
+    command_service_t service;
+    runtime_parameters_t parameters;
+    telemetry_toggle_t telemetry;
+    motor_test_service_t motor;
+    motor_capture_t motor_capture = {0};
+    output_capture_t capture = {{0}, 0U};
+
+    setup(&service, &parameters, &telemetry, &motor,
+          &motor_capture, &capture);
+
+    feed_text(&service,
+              "script begin\n"
+              "motor arm\n"
+              "motor brake-response right 50 5000 10\n");
+
+    assert(strstr(capture.text, "script line rejected") != NULL);
+    assert(service.script_line_count == 0U);
+    assert(!service.script_recording);
+}
+
+static void test_script_run_requires_arm_and_sequences_motor_wait_motor(void)
+{
+    command_service_t service;
+    runtime_parameters_t parameters;
+    telemetry_toggle_t telemetry;
+    motor_test_service_t motor;
+    motor_capture_t motor_capture = {0};
+    output_capture_t capture = {{0}, 0U};
+
+    setup(&service, &parameters, &telemetry, &motor,
+          &motor_capture, &capture);
+
+    feed_text(&service,
+              "script begin\n"
+              "motor brake-response right 50 5000 10\n"
+              "wait 5\n"
+              "motor brake-response left 50 5000 10\n"
+              "script end\n"
+              "script run\n");
+    assert(strstr(capture.text, "motor is not armed") != NULL);
+    assert(!service.script_running);
+
+    feed_text(&service, "motor arm\n");
+    feed_text(&service, "script run\n");
+    command_service_update_1ms(&service);
+    assert(service.script_running);
+    assert(service.script_motor_active);
+    assert(motor_test_service_brake_state(&motor) == MOTOR_BRAKE_DRIVE);
+    assert(motor_capture.last_percent == 50);
+
+    motor.active = false;
+    motor.armed = false;
+    motor.brake_state = MOTOR_BRAKE_DONE;
+    command_service_update_1ms(&service);
+    assert(service.script_waiting);
+    assert(motor_capture.last_percent == 0);
+
+    g_fake_now_ms += 5U;
+    command_service_update_1ms(&service);
+    assert(service.script_motor_active);
+    assert(motor_test_service_brake_state(&motor) == MOTOR_BRAKE_DRIVE);
+    assert(motor_capture.last_percent == -50);
+
+    motor.active = false;
+    motor.armed = false;
+    motor.brake_state = MOTOR_BRAKE_DONE;
+    command_service_update_1ms(&service);
+    assert(!service.script_running);
+    assert(strstr(capture.text, "[SCRIPT] complete lines=3 armed=0") != NULL);
+}
+
 int main(void)
 {
     test_telemetry_command_and_button_share_state();
@@ -442,6 +543,9 @@ int main(void)
     test_motor_characterize_command_requires_direction_and_arm();
     test_motor_response_command_is_parameterized_and_bounded();
     test_motor_brake_response_is_bounded_and_d2_only();
+    test_script_records_safe_lines_without_running_them();
+    test_script_rejects_unsafe_recorded_lines();
+    test_script_run_requires_arm_and_sequences_motor_wait_motor();
 
     printf("PASS: command service tests\n");
     return 0;

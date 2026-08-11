@@ -10,6 +10,11 @@
 #define COMMAND_MAX_ARGUMENTS 6U
 #define COMMAND_RESPONSE_CAPACITY 256U
 
+static bool deadline_reached(uint32_t now_ms, uint32_t deadline_ms)
+{
+    return (int32_t)(now_ms - deadline_ms) >= 0;
+}
+
 static void write_response(
     command_service_t *service,
     const char *format,
@@ -80,6 +85,73 @@ static bool parse_int32(const char *text, int32_t *value)
 
     *value = (int32_t)parsed;
     return true;
+}
+
+static bool is_script_allowed_motor_line(
+    size_t count,
+    char **arguments)
+{
+    if ((count == 6U) &&
+        (strcmp(arguments[0], "motor") == 0) &&
+        (strcmp(arguments[1], "brake-response") == 0)) {
+        return true;
+    }
+
+    return false;
+}
+
+static bool is_script_allowed_wait_line(
+    size_t count,
+    char **arguments)
+{
+    int32_t wait_ms;
+
+    if ((count == 2U) &&
+        (strcmp(arguments[0], "wait") == 0) &&
+        parse_int32(arguments[1], &wait_ms) &&
+        (wait_ms >= 0) &&
+        (wait_ms <= (int32_t)COMMAND_SCRIPT_MAX_RUN_MS)) {
+        return true;
+    }
+
+    return false;
+}
+
+static bool is_script_allowed_line(const char *line)
+{
+    char scratch[COMMAND_SERVICE_LINE_CAPACITY];
+    char *arguments[COMMAND_MAX_ARGUMENTS];
+    size_t count;
+
+    (void)snprintf(scratch, sizeof(scratch), "%s", line);
+    count = split_arguments(scratch, arguments, COMMAND_MAX_ARGUMENTS);
+
+    return is_script_allowed_motor_line(count, arguments) ||
+           is_script_allowed_wait_line(count, arguments);
+}
+
+static void script_abort(
+    command_service_t *service,
+    const char *reason)
+{
+    uint8_t line_number = service->script_cursor;
+
+    if (service->script_motor_active && motor_test_service_is_active(service->motor)) {
+        motor_test_service_disarm(service->motor);
+    }
+
+    service->script_running = false;
+    service->script_waiting = false;
+    service->script_motor_active = false;
+    service->script_cursor = 0U;
+    service->script_deadline_ms = 0U;
+    service->script_wait_deadline_ms = 0U;
+
+    write_response(
+        service,
+        "[SCRIPT] abort line=%u reason=%s armed=0 output_pct=0\n",
+        (unsigned int)(line_number + 1U),
+        reason);
 }
 
 static const char *motor_channel_io(const char *channel)
@@ -693,6 +765,132 @@ static void execute_transport(
         "[ERR] only text transport is implemented\n");
 }
 
+static void execute_script(
+    command_service_t *service,
+    size_t count,
+    char **arguments)
+{
+    uint8_t index;
+
+    if ((count == 2U) &&
+        (strcmp(arguments[1], "begin") == 0)) {
+        if (service->script_running) {
+            write_response(service, "[ERR] script is running\n");
+            return;
+        }
+        service->script_recording = true;
+        service->script_line_count = 0U;
+        write_response(
+            service,
+            "[OK] script recording max_lines=%u line_bytes=%u\n",
+            (unsigned int)COMMAND_SCRIPT_MAX_LINES,
+            (unsigned int)COMMAND_SERVICE_LINE_CAPACITY);
+        return;
+    }
+
+    if ((count == 2U) &&
+        (strcmp(arguments[1], "end") == 0)) {
+        if (!service->script_recording) {
+            write_response(service, "[ERR] script is not recording\n");
+            return;
+        }
+        service->script_recording = false;
+        write_response(
+            service,
+            "[OK] script stored lines=%u ram_only=1\n",
+            (unsigned int)service->script_line_count);
+        return;
+    }
+
+    if ((count == 2U) &&
+        (strcmp(arguments[1], "clear") == 0)) {
+        if (service->script_running) {
+            script_abort(service, "clear");
+        }
+        service->script_recording = false;
+        service->script_line_count = 0U;
+        service->script_cursor = 0U;
+        write_response(service, "[OK] script cleared\n");
+        return;
+    }
+
+    if ((count == 2U) &&
+        (strcmp(arguments[1], "list") == 0)) {
+        if (service->script_recording) {
+            write_response(service, "[SCRIPT] recording=1\n");
+        }
+        for (index = 0U; index < service->script_line_count; index++) {
+            write_response(
+                service,
+                "[SCRIPT] %u: %s\n",
+                (unsigned int)(index + 1U),
+                service->script_lines[index]);
+        }
+        write_response(
+            service,
+            "[SCRIPT] lines=%u running=%u\n",
+            (unsigned int)service->script_line_count,
+            service->script_running ? 1U : 0U);
+        return;
+    }
+
+    if ((count == 2U) &&
+        (strcmp(arguments[1], "abort") == 0)) {
+        if (!service->script_running && !service->script_recording) {
+            write_response(service, "[OK] script idle\n");
+            return;
+        }
+        if (service->script_running) {
+            script_abort(service, "user");
+        }
+        service->script_recording = false;
+        write_response(service, "[OK] script recording stopped\n");
+        return;
+    }
+
+    if ((count == 2U) &&
+        (strcmp(arguments[1], "run") == 0)) {
+        if (service->script_recording) {
+            write_response(service, "[ERR] script is still recording\n");
+            return;
+        }
+        if (service->script_running) {
+            write_response(service, "[ERR] script is already running\n");
+            return;
+        }
+        if (service->script_line_count == 0U) {
+            write_response(service, "[ERR] script is empty\n");
+            return;
+        }
+        if (!motor_test_service_is_armed(service->motor)) {
+            write_response(service, "[ERR] motor is not armed\n");
+            return;
+        }
+        if (motor_test_service_is_active(service->motor)) {
+            write_response(service, "[ERR] motor operation already active\n");
+            return;
+        }
+
+        service->script_running = true;
+        service->script_waiting = false;
+        service->script_motor_active = false;
+        service->script_cursor = 0U;
+        service->script_deadline_ms =
+            service->motor->now_ms(service->motor->time_context) +
+            COMMAND_SCRIPT_MAX_RUN_MS;
+        write_response(
+            service,
+            "[SCRIPT] run lines=%u timeout_ms=%u\n",
+            (unsigned int)service->script_line_count,
+            (unsigned int)COMMAND_SCRIPT_MAX_RUN_MS);
+        return;
+    }
+
+    write_response(
+        service,
+        "[ERR] usage: script begin|end|list|clear|run|abort\n");
+}
+
 void command_service_init(
     command_service_t *service,
     runtime_parameters_t *parameters,
@@ -717,7 +915,15 @@ void command_service_init(
     service->write = write;
     service->write_context = write_context;
     service->length = 0U;
+    service->script_line_count = 0U;
+    service->script_cursor = 0U;
+    service->script_deadline_ms = 0U;
+    service->script_wait_deadline_ms = 0U;
     service->discard_until_newline = false;
+    service->script_recording = false;
+    service->script_running = false;
+    service->script_waiting = false;
+    service->script_motor_active = false;
     service->line[0] = '\0';
 }
 
@@ -739,10 +945,12 @@ void command_service_execute_line(
         (strcmp(arguments[0], "help") == 0)) {
         write_response(
             service,
-            "[OK] commands: help status telem param transport motor\n");
+            "[OK] commands: help status script telem param transport motor\n");
     } else if ((count == 1U) &&
                (strcmp(arguments[0], "status") == 0)) {
         execute_status(service);
+    } else if (strcmp(arguments[0], "script") == 0) {
+        execute_script(service, count, arguments);
     } else if (strcmp(arguments[0], "telem") == 0) {
         execute_telemetry(service, count, arguments);
     } else if (strcmp(arguments[0], "param") == 0) {
@@ -759,6 +967,122 @@ void command_service_execute_line(
     }
 }
 
+void command_service_update_1ms(command_service_t *service)
+{
+    uint32_t now_ms;
+
+    if (!service->script_running) {
+        return;
+    }
+
+    now_ms = service->motor->now_ms(service->motor->time_context);
+    if (deadline_reached(now_ms, service->script_deadline_ms)) {
+        script_abort(service, "timeout");
+        return;
+    }
+
+    if (service->script_waiting) {
+        if (!deadline_reached(now_ms, service->script_wait_deadline_ms)) {
+            return;
+        }
+        service->script_waiting = false;
+        service->script_cursor++;
+    }
+
+    if (service->script_motor_active) {
+        motor_brake_state_t state;
+
+        if (motor_test_service_is_active(service->motor)) {
+            return;
+        }
+
+        state = motor_test_service_brake_state(service->motor);
+        if (state != MOTOR_BRAKE_DONE) {
+            script_abort(service, "motor-failed");
+            return;
+        }
+        write_response(
+            service,
+            "[SCRIPT] line=%u pass\n",
+            (unsigned int)(service->script_cursor + 1U));
+        service->script_motor_active = false;
+        service->script_cursor++;
+    }
+
+    while (service->script_running &&
+           !service->script_waiting &&
+           !service->script_motor_active) {
+        char scratch[COMMAND_SERVICE_LINE_CAPACITY];
+        char parsed[COMMAND_SERVICE_LINE_CAPACITY];
+        char *arguments[COMMAND_MAX_ARGUMENTS];
+        size_t count;
+
+        if (service->script_cursor >= service->script_line_count) {
+            service->script_running = false;
+            service->script_cursor = 0U;
+            service->script_deadline_ms = 0U;
+            write_response(
+                service,
+                "[SCRIPT] complete lines=%u armed=0\n",
+                (unsigned int)service->script_line_count);
+            return;
+        }
+
+        (void)snprintf(
+            parsed,
+            sizeof(parsed),
+            "%s",
+            service->script_lines[service->script_cursor]);
+        count = split_arguments(parsed, arguments, COMMAND_MAX_ARGUMENTS);
+
+        write_response(
+            service,
+            "[SCRIPT] line=%u/%u start: %s\n",
+            (unsigned int)(service->script_cursor + 1U),
+            (unsigned int)service->script_line_count,
+            service->script_lines[service->script_cursor]);
+
+        if (is_script_allowed_wait_line(count, arguments)) {
+            int32_t wait_ms = 0;
+
+            (void)parse_int32(arguments[1], &wait_ms);
+            motor_test_service_stop(service->motor);
+            service->script_waiting = true;
+            service->script_wait_deadline_ms = now_ms + (uint32_t)wait_ms;
+            write_response(
+                service,
+                "[SCRIPT] line=%u wait_ms=%ld output_pct=0\n",
+                (unsigned int)(service->script_cursor + 1U),
+                (long)wait_ms);
+            if (wait_ms == 0) {
+                service->script_waiting = false;
+                service->script_cursor++;
+                continue;
+            }
+            return;
+        }
+
+        if (is_script_allowed_motor_line(count, arguments)) {
+            (void)motor_test_service_arm(service->motor);
+            (void)snprintf(
+                scratch,
+                sizeof(scratch),
+                "%s",
+                service->script_lines[service->script_cursor]);
+            command_service_execute_line(service, scratch);
+            if (!motor_test_service_is_active(service->motor)) {
+                script_abort(service, "start-failed");
+                return;
+            }
+            service->script_motor_active = true;
+            return;
+        }
+
+        script_abort(service, "invalid-line");
+        return;
+    }
+}
+
 void command_service_feed_char(
     command_service_t *service,
     char character)
@@ -772,9 +1096,37 @@ void command_service_feed_char(
 
         if (service->length > 0U) {
             service->line[service->length] = '\0';
-            command_service_execute_line(
-                service,
-                service->line);
+            if (service->script_recording &&
+                (strcmp(service->line, "script end") != 0) &&
+                (strcmp(service->line, "script abort") != 0) &&
+                (strcmp(service->line, "script clear") != 0)) {
+                if (service->script_line_count >= COMMAND_SCRIPT_MAX_LINES) {
+                    service->script_recording = false;
+                    write_response(
+                        service,
+                        "[ERR] script full; recording stopped\n");
+                } else if (!is_script_allowed_line(service->line)) {
+                    service->script_recording = false;
+                    write_response(
+                        service,
+                        "[ERR] script line rejected; allowed: motor brake-response, wait <ms>\n");
+                } else {
+                    (void)snprintf(
+                        service->script_lines[service->script_line_count],
+                        COMMAND_SERVICE_LINE_CAPACITY,
+                        "%s",
+                        service->line);
+                    service->script_line_count++;
+                    write_response(
+                        service,
+                        "[SCRIPT] stored line=%u\n",
+                        (unsigned int)service->script_line_count);
+                }
+            } else {
+                command_service_execute_line(
+                    service,
+                    service->line);
+            }
             service->length = 0U;
         }
         return;
