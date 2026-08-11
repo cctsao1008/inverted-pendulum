@@ -157,7 +157,7 @@ int main(void)
     printf("[VBUS] nominal_mV=%lu calibration=required\n",
            (unsigned long)board_adc_read_vbus_millivolts());
     printf("[ENC] PA0/PA1 TIM2 quadrature x4 filter=10; timebase=TIM4\n");
-    printf("[CLI] type help; text maintenance mode\n");
+    printf("[CLI] type help; text maintenance mode; script buffer in RAM\n");
     printf("[ANGLE] upright_adc=%u direction=%d wrap=[-pi,+pi)\n",
            (unsigned int)parameters.pendulum_upright_adc,
            (int)parameters.pendulum_direction);
@@ -374,6 +374,8 @@ int main(void)
                            (unsigned long)board_adc_read_vbus_millivolts());
                 }
             }
+
+            command_service_update_1ms(&command_service);
 
             telemetry_changed = telemetry_toggle_update(
                 &telemetry_toggle,

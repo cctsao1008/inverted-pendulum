@@ -8,6 +8,8 @@
 #include "telemetry_toggle.h"
 
 #define COMMAND_SERVICE_LINE_CAPACITY 96U
+#define COMMAND_SCRIPT_MAX_LINES 32U
+#define COMMAND_SCRIPT_MAX_RUN_MS 90000U
 
 typedef void (*command_service_write_fn)(
     const char *text,
@@ -31,8 +33,17 @@ typedef struct {
     command_service_write_fn write;
     void *write_context;
     char line[COMMAND_SERVICE_LINE_CAPACITY];
+    char script_lines[COMMAND_SCRIPT_MAX_LINES][COMMAND_SERVICE_LINE_CAPACITY];
     uint8_t length;
+    uint8_t script_line_count;
+    uint8_t script_cursor;
+    uint32_t script_deadline_ms;
+    uint32_t script_wait_deadline_ms;
     bool discard_until_newline;
+    bool script_recording;
+    bool script_running;
+    bool script_waiting;
+    bool script_motor_active;
 } command_service_t;
 
 void command_service_init(
@@ -55,5 +66,7 @@ void command_service_feed_char(
 void command_service_execute_line(
     command_service_t *service,
     char *line);
+
+void command_service_update_1ms(command_service_t *service);
 
 #endif

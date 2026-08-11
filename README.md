@@ -133,6 +133,34 @@ drive, neutral, reverse-brake, and settling displacement and reports
 automatically. D2 remains the only enabled channel; the measured encoder sign
 at brake entry is used instead of assuming a fixed encoder polarity.
 
+Repeated commissioning sequences can be stored in a RAM-only script buffer and
+run after a single manual arm. Recording only stores whitelisted lines; it does
+not start the motor:
+
+```text
+script clear
+script begin
+motor brake-response right 50 5000 10
+wait 5000
+motor brake-response left 50 5000 10
+wait 5000
+motor brake-response right 50 5000 10
+wait 5000
+motor brake-response left 50 5000 10
+wait 5000
+motor brake-response right 50 5000 10
+wait 5000
+motor brake-response left 50 5000 10
+script end
+script list
+motor arm
+script run
+```
+
+The first script implementation accepts only `motor brake-response ...` and
+`wait <ms>`. It refuses `motor arm` inside the script, keeps PWM at zero during
+waits, aborts on any motor failure or script timeout, and clears on reset.
+
 See [Forest D1 2016 hardware baseline](docs/hardware/forest-d1-2016-baseline.md) for the schematic-derived pin map, revision boundary, electrical observations, firmware discrepancy, and physical validation checklist.
 
 The STM32F103C8T6 board remains the immediate baseline because it plugs directly into the existing driver board. A **Raspberry Pi Pico 2 / RP2350** port, including native USB HID and CDC, is a planned later platform and is not implemented on `main`.
