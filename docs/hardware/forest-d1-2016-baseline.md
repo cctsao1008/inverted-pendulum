@@ -38,7 +38,7 @@ A schematic establishes intended connectivity, but it does not establish sensor 
 | USART1 RX | PA10 | Connected through the controller-board USB-UART path |
 | Blue user LED | PA4 | Active-low |
 | Forest S1 USER key | PA5 | Active-low |
-| Forest D1 M key | **PA3** | Active-low; this is not the pendulum ADC |
+| Forest D1 M key | **PA3** | Active-low; toggles 10 Hz sensor telemetry, which defaults off |
 | Forest D1 X key | PA2 | Active-low |
 | Forest D1 + key | PA11 | Active-low |
 | Forest D1 - key | PA12 | Active-low |
