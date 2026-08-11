@@ -7,7 +7,7 @@ The project currently targets the original **Forest S1 STM32F103C8T6 controller 
 > [!CAUTION]
 > The current firmware application is still **sensor-only**. Motor output is not initialized, and the balance controller is not yet connected to the real-time firmware loop. Keep motor power disconnected during initial bring-up and sensor verification.
 >
-> The 2016 Forest D1 schematic connects the pendulum sensor to **PA7 / ADC1_IN7**, but the current `main` firmware still configures **PA3 / ADC1_IN3**. Do not use the current ADC reading for control until this mismatch is corrected and verified on the physical unit.
+> The firmware now configures the 2016 Forest D1 schematic input at **PA7 / ADC1_IN7**, but the sensor zero, range, direction, wiring, and physical signal are not yet verified. Do not use the ADC reading for control until that physical validation is complete.
 
 ## Current status
 
@@ -15,7 +15,7 @@ The `main` branch contains these foundations:
 
 - STM32F103C8T6 bring-up using [libopencm3](https://github.com/libopencm3/libopencm3)
 - 1 kHz firmware timing baseline
-- Sensor-acquisition framework; the pendulum ADC pin requires correction from PA3 to PA7
+- Sensor-acquisition framework with the pendulum ADC mapped to PA7 / ADC1_IN7
 - Arm quadrature-encoder acquisition
 - UART telemetry at 115200 baud
 - Control-loop timing profiling output
@@ -43,7 +43,7 @@ Before V0.6 is connected to hardware, the PA7 pendulum ADC mapping, sensor zero,
 | Framework | Bare metal with libopencm3 |
 | MCU clock | 8 MHz HSE, 72 MHz system clock |
 | Control tick | 1 kHz |
-| Pendulum input | **PA7 / ADC1_IN7**; current `main` firmware still requires correction |
+| Pendulum input | **PA7 / ADC1_IN7**; firmware-mapped, physical signal verification pending |
 | Battery voltage input | PA6 / ADC1_IN6 through a 10 kΩ / 1 kΩ divider |
 | Arm encoder | TIM4 quadrature input on PB6/PB7 |
 | Telemetry | USART1 on PA9/PA10, 115200 baud, 100 Hz |
@@ -135,7 +135,7 @@ build/stm32f103/inverted-pendulum.map
 1. Keep motor power disconnected.
 2. Flash the STM32F103 firmware.
 3. Confirm the status LED and boot messages.
-4. Correct the pendulum ADC mapping to PA7 / ADC1_IN7 in a dedicated firmware change.
+4. Confirm the boot message reports PA7 / ADC1_IN7.
 5. Verify 100 Hz UART sensor telemetry.
 6. Check ADC range, encoder direction, zero offsets, and timing.
 7. Enable motor-related work only after sensor signs, scales, limits, and fail-closed behavior are confirmed.
