@@ -130,8 +130,15 @@ release threshold is 600 counts/s, reverse PWM is limited to 300 ms, and one
 opposite encoder count cannot terminate the measurement. The report separates
 drive, neutral, reverse-brake, and settling displacement and reports
 `stop_reason=stable|reversal`. Completion and every fault path stop and disarm
-automatically. D2 remains the only enabled channel; the measured encoder sign
-at brake entry is used instead of assuming a fixed encoder polarity.
+automatically. Successful or reversal-classified runs also emit a compact
+`[MOTOR_CSV]` line:
+
+```text
+[MOTOR_CSV] brake_response,stop_reason,direction,drive_pct,drive_ms,brake_pct,drive_delta,cutoff_velocity_counts_s,neutral_delta,brake_entry_velocity_counts_s,brake_time_ms,braking_delta,release_velocity_counts_s,settling_delta,final_velocity_counts_s,peak_velocity_counts_s,vbus_mV
+```
+
+D2 remains the only enabled channel; the measured encoder sign at brake entry
+is used instead of assuming a fixed encoder polarity.
 
 Repeated commissioning sequences can be stored in a RAM-only script buffer and
 run after a single manual arm. Recording only stores whitelisted lines; it does
