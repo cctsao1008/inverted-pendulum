@@ -21,7 +21,9 @@ add_custom_target(libopencm3_stm32f1_build
 
 add_executable(${TARGET_NAME}
     ${PROJECT_SOURCE_DIR}/app/main.c
+    ${PROJECT_SOURCE_DIR}/app/telemetry_toggle.c
     ${PLATFORM_DIR}/board/board_adc.c
+    ${PLATFORM_DIR}/board/board_button.c
     ${PLATFORM_DIR}/board/board_clock.c
     ${PLATFORM_DIR}/board/board_encoder.c
     ${PLATFORM_DIR}/board/board_led.c

@@ -79,3 +79,24 @@ add_test(
     NAME balance_controller
     COMMAND test_balance_controller
 )
+
+add_executable(test_telemetry_toggle
+    test_telemetry_toggle.c
+    ${PROJECT_SOURCE_DIR}/app/telemetry_toggle.c
+)
+
+target_include_directories(test_telemetry_toggle PRIVATE
+    ${PROJECT_SOURCE_DIR}/app
+)
+
+target_compile_options(test_telemetry_toggle PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME telemetry_toggle
+    COMMAND test_telemetry_toggle
+)

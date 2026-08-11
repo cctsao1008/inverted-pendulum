@@ -17,13 +17,13 @@ The `main` branch contains these foundations:
 - 1 kHz firmware timing baseline
 - Sensor-acquisition framework with the pendulum ADC mapped to PA7 / ADC1_IN7
 - Arm quadrature-encoder acquisition
-- UART telemetry at 115200 baud
+- M-button-controlled UART telemetry at 115200 baud and 10 Hz when enabled
 - Control-loop timing profiling output
 - Platform-independent control configuration
 - Fail-closed safety state machine
 - Filtered four-state estimator
 - Four-state balance controller using `u = -Kx`
-- Four host-side unit-test suites
+- Five host-side unit-test suites
 
 The estimator, controller, and safety modules exist in `control/`, but `app/main.c` currently performs sensor acquisition and telemetry only.
 
@@ -46,7 +46,7 @@ Before V0.6 is connected to hardware, the PA7 pendulum ADC mapping, sensor zero,
 | Pendulum input | **PA7 / ADC1_IN7**; firmware-mapped, physical signal verification pending |
 | Battery voltage input | PA6 / ADC1_IN6 through a 10 kΩ / 1 kΩ divider |
 | Arm encoder | TIM4 quadrature input on PB6/PB7 |
-| Telemetry | USART1 on PA9/PA10, 115200 baud, 100 Hz |
+| Telemetry | USART1 on PA9/PA10, 115200 baud; PA3 M button toggles 10 Hz output; default off |
 | Motor B control | PB1 / TIM3_CH4 PWM, PB13 / BIN1, PB12 / BIN2 |
 | Motor output | Not initialized in the current application |
 
@@ -104,6 +104,7 @@ The current test executables cover:
 - safety manager
 - state estimator
 - balance controller
+- telemetry button debounce and toggle behavior
 
 ## Build STM32F103 firmware
 
@@ -136,7 +137,7 @@ build/stm32f103/inverted-pendulum.map
 2. Flash the STM32F103 firmware.
 3. Confirm the status LED and boot messages.
 4. Confirm the boot message reports PA7 / ADC1_IN7.
-5. Verify 100 Hz UART sensor telemetry.
+5. Press the PA3 M button once and verify 10 Hz UART sensor telemetry; press it again to stop the output.
 6. Check ADC range, encoder direction, zero offsets, and timing.
 7. Enable motor-related work only after sensor signs, scales, limits, and fail-closed behavior are confirmed.
 
