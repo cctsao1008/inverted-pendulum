@@ -102,6 +102,20 @@ static void test_tick_wraparound_is_supported(void)
     assert(telemetry_toggle_is_enabled(&toggle));
 }
 
+static void test_command_style_set_and_toggle_share_state(void)
+{
+    telemetry_toggle_t toggle;
+
+    telemetry_toggle_init(&toggle, false, 0U);
+
+    assert(telemetry_toggle_set_enabled(&toggle, true));
+    assert(telemetry_toggle_is_enabled(&toggle));
+    assert(!telemetry_toggle_set_enabled(&toggle, true));
+
+    assert(!telemetry_toggle_toggle(&toggle));
+    assert(!telemetry_toggle_is_enabled(&toggle));
+}
+
 int main(void)
 {
     test_initial_state_is_disabled();
@@ -110,6 +124,7 @@ int main(void)
     test_release_does_not_toggle_and_next_press_disables();
     test_held_at_boot_requires_release_and_new_press();
     test_tick_wraparound_is_supported();
+    test_command_style_set_and_toggle_share_state();
 
     printf("PASS: telemetry toggle tests\n");
     return 0;

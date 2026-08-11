@@ -29,7 +29,7 @@ bool telemetry_toggle_update(
         toggle->stable_pressed = toggle->candidate_pressed;
 
         if (toggle->stable_pressed) {
-            toggle->enabled = !toggle->enabled;
+            (void)telemetry_toggle_toggle(toggle);
             return true;
         }
     }
@@ -39,5 +39,21 @@ bool telemetry_toggle_update(
 
 bool telemetry_toggle_is_enabled(const telemetry_toggle_t *toggle)
 {
+    return toggle->enabled;
+}
+
+bool telemetry_toggle_set_enabled(
+    telemetry_toggle_t *toggle,
+    bool enabled)
+{
+    bool changed = (toggle->enabled != enabled);
+
+    toggle->enabled = enabled;
+    return changed;
+}
+
+bool telemetry_toggle_toggle(telemetry_toggle_t *toggle)
+{
+    toggle->enabled = !toggle->enabled;
     return toggle->enabled;
 }

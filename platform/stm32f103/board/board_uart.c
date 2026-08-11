@@ -43,6 +43,17 @@ void board_uart_write(const char *data, uint32_t length)
     }
 }
 
+bool board_uart_try_read_char(char *character)
+{
+    if ((character == NULL) ||
+        !usart_get_flag(USART1, USART_SR_RXNE)) {
+        return false;
+    }
+
+    *character = (char)usart_recv(USART1);
+    return true;
+}
+
 int _write(int file, char *data, int length)
 {
     (void)file;

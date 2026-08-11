@@ -20,7 +20,10 @@ add_custom_target(libopencm3_stm32f1_build
 )
 
 add_executable(${TARGET_NAME}
+    ${PROJECT_SOURCE_DIR}/app/command_service.c
     ${PROJECT_SOURCE_DIR}/app/main.c
+    ${PROJECT_SOURCE_DIR}/app/pendulum_angle.c
+    ${PROJECT_SOURCE_DIR}/app/runtime_parameters.c
     ${PROJECT_SOURCE_DIR}/app/telemetry_toggle.c
     ${PLATFORM_DIR}/board/board_adc.c
     ${PLATFORM_DIR}/board/board_button.c
@@ -38,6 +41,7 @@ add_dependencies(
 )
 
 target_include_directories(${TARGET_NAME} PRIVATE
+    ${PROJECT_SOURCE_DIR}/app
     ${PLATFORM_DIR}/board
     ${LIBOPENCM3_DIR}/include
 )
