@@ -9,6 +9,8 @@
 
 #define COMMAND_MAX_ARGUMENTS 6U
 #define COMMAND_RESPONSE_CAPACITY 256U
+#define COMMAND_SCRIPT_BRAKE_SWEEP_REPEATS 3U
+#define COMMAND_SCRIPT_BRAKE_SWEEP_WAIT_MS 5000U
 
 static bool deadline_reached(uint32_t now_ms, uint32_t deadline_ms)
 {
@@ -130,6 +132,13 @@ static bool is_script_allowed_line(const char *line)
            is_script_allowed_wait_line(count, arguments);
 }
 
+static void script_clear_buffer(command_service_t *service)
+{
+    service->script_recording = false;
+    service->script_line_count = 0U;
+    service->script_cursor = 0U;
+}
+
 static void script_abort(
     command_service_t *service,
     const char *reason)
@@ -152,6 +161,62 @@ static void script_abort(
         "[SCRIPT] abort line=%u reason=%s armed=0 output_pct=0\n",
         (unsigned int)(line_number + 1U),
         reason);
+}
+
+static bool script_load_brake_sweep(
+    command_service_t *service,
+    int32_t drive_percent,
+    int32_t drive_ms,
+    int32_t brake_percent)
+{
+    uint8_t line = 0U;
+    uint8_t repeat;
+
+    if ((drive_percent < MOTOR_RESPONSE_MIN_PERCENT) ||
+        (drive_percent > MOTOR_RESPONSE_MAX_PERCENT) ||
+        (drive_ms < (int32_t)MOTOR_RESPONSE_MIN_DRIVE_MS) ||
+        (drive_ms > (int32_t)MOTOR_RESPONSE_MAX_DRIVE_MS) ||
+        (brake_percent < MOTOR_BRAKE_MIN_PERCENT) ||
+        (brake_percent > MOTOR_BRAKE_MAX_PERCENT)) {
+        return false;
+    }
+
+    script_clear_buffer(service);
+
+    for (repeat = 0U;
+         repeat < COMMAND_SCRIPT_BRAKE_SWEEP_REPEATS;
+         repeat++) {
+        (void)snprintf(
+            service->script_lines[line++],
+            COMMAND_SERVICE_LINE_CAPACITY,
+            "motor brake-response right %ld %ld %ld",
+            (long)drive_percent,
+            (long)drive_ms,
+            (long)brake_percent);
+        (void)snprintf(
+            service->script_lines[line++],
+            COMMAND_SERVICE_LINE_CAPACITY,
+            "wait %u",
+            (unsigned int)COMMAND_SCRIPT_BRAKE_SWEEP_WAIT_MS);
+        (void)snprintf(
+            service->script_lines[line++],
+            COMMAND_SERVICE_LINE_CAPACITY,
+            "motor brake-response left %ld %ld %ld",
+            (long)drive_percent,
+            (long)drive_ms,
+            (long)brake_percent);
+
+        if (repeat != (COMMAND_SCRIPT_BRAKE_SWEEP_REPEATS - 1U)) {
+            (void)snprintf(
+                service->script_lines[line++],
+                COMMAND_SERVICE_LINE_CAPACITY,
+                "wait %u",
+                (unsigned int)COMMAND_SCRIPT_BRAKE_SWEEP_WAIT_MS);
+        }
+    }
+
+    service->script_line_count = line;
+    return true;
 }
 
 static const char *motor_channel_io(const char *channel)
@@ -807,10 +872,104 @@ static void execute_script(
         if (service->script_running) {
             script_abort(service, "clear");
         }
-        service->script_recording = false;
-        service->script_line_count = 0U;
-        service->script_cursor = 0U;
+        script_clear_buffer(service);
         write_response(service, "[OK] script cleared\n");
+        return;
+    }
+
+    if ((count == 5U) &&
+        (strcmp(arguments[1], "load") == 0) &&
+        (strcmp(arguments[2], "brake-sweep") == 0)) {
+        int32_t drive_percent;
+        int32_t drive_ms;
+        int32_t brake_percent;
+
+        if (service->script_recording) {
+            write_response(service, "[ERR] script is still recording\n");
+            return;
+        }
+        if (service->script_running) {
+            write_response(service, "[ERR] script is running\n");
+            return;
+        }
+        if (!parse_int32(arguments[3], &drive_percent) ||
+            !parse_int32(arguments[4], &drive_ms)) {
+            write_response(
+                service,
+                "[ERR] usage: script load brake-sweep <30..80> "
+                "<1000..10000 ms> <10..20>\n");
+            return;
+        }
+        brake_percent = 10;
+        if (!script_load_brake_sweep(
+                service,
+                drive_percent,
+                drive_ms,
+                brake_percent)) {
+            write_response(
+                service,
+                "[ERR] brake-sweep requires drive_pct=30..80 "
+                "drive_ms=1000..10000 brake_pct=10..20\n");
+            return;
+        }
+        write_response(
+            service,
+            "[OK] script loaded brake-sweep drive_pct=%ld drive_ms=%ld "
+            "brake_pct=%ld repeats=%u wait_ms=%u lines=%u ram_only=1\n",
+            (long)drive_percent,
+            (long)drive_ms,
+            (long)brake_percent,
+            (unsigned int)COMMAND_SCRIPT_BRAKE_SWEEP_REPEATS,
+            (unsigned int)COMMAND_SCRIPT_BRAKE_SWEEP_WAIT_MS,
+            (unsigned int)service->script_line_count);
+        return;
+    }
+
+    if ((count == 6U) &&
+        (strcmp(arguments[1], "load") == 0) &&
+        (strcmp(arguments[2], "brake-sweep") == 0)) {
+        int32_t drive_percent;
+        int32_t drive_ms;
+        int32_t brake_percent;
+
+        if (service->script_recording) {
+            write_response(service, "[ERR] script is still recording\n");
+            return;
+        }
+        if (service->script_running) {
+            write_response(service, "[ERR] script is running\n");
+            return;
+        }
+        if (!parse_int32(arguments[3], &drive_percent) ||
+            !parse_int32(arguments[4], &drive_ms) ||
+            !parse_int32(arguments[5], &brake_percent)) {
+            write_response(
+                service,
+                "[ERR] usage: script load brake-sweep <30..80> "
+                "<1000..10000 ms> <10..20>\n");
+            return;
+        }
+        if (!script_load_brake_sweep(
+                service,
+                drive_percent,
+                drive_ms,
+                brake_percent)) {
+            write_response(
+                service,
+                "[ERR] brake-sweep requires drive_pct=30..80 "
+                "drive_ms=1000..10000 brake_pct=10..20\n");
+            return;
+        }
+        write_response(
+            service,
+            "[OK] script loaded brake-sweep drive_pct=%ld drive_ms=%ld "
+            "brake_pct=%ld repeats=%u wait_ms=%u lines=%u ram_only=1\n",
+            (long)drive_percent,
+            (long)drive_ms,
+            (long)brake_percent,
+            (unsigned int)COMMAND_SCRIPT_BRAKE_SWEEP_REPEATS,
+            (unsigned int)COMMAND_SCRIPT_BRAKE_SWEEP_WAIT_MS,
+            (unsigned int)service->script_line_count);
         return;
     }
 
@@ -888,7 +1047,8 @@ static void execute_script(
 
     write_response(
         service,
-        "[ERR] usage: script begin|end|list|clear|run|abort\n");
+        "[ERR] usage: script begin|end|list|clear|run|abort|"
+        "load brake-sweep <pct> <ms> [brake_pct]\n");
 }
 
 void command_service_init(

@@ -529,6 +529,55 @@ static void test_script_run_requires_arm_and_sequences_motor_wait_motor(void)
     assert(strstr(capture.text, "[SCRIPT] complete lines=3 armed=0") != NULL);
 }
 
+static void test_script_load_brake_sweep_generates_repeat_template(void)
+{
+    command_service_t service;
+    runtime_parameters_t parameters;
+    telemetry_toggle_t telemetry;
+    motor_test_service_t motor;
+    motor_capture_t motor_capture = {0};
+    output_capture_t capture = {{0}, 0U};
+
+    setup(&service, &parameters, &telemetry, &motor,
+          &motor_capture, &capture);
+
+    feed_text(&service,
+              "script load brake-sweep 40 5000\n"
+              "script list\n");
+
+    assert(service.script_line_count == 11U);
+    assert(strstr(capture.text, "script loaded brake-sweep drive_pct=40") != NULL);
+    assert(strstr(capture.text, "brake_pct=10") != NULL);
+    assert(strstr(capture.text, "[SCRIPT] 1: motor brake-response right 40 5000 10") != NULL);
+    assert(strstr(capture.text, "[SCRIPT] 2: wait 5000") != NULL);
+    assert(strstr(capture.text, "[SCRIPT] 3: motor brake-response left 40 5000 10") != NULL);
+    assert(strstr(capture.text, "[SCRIPT] 11: motor brake-response left 40 5000 10") != NULL);
+    assert(!motor_test_service_is_active(&motor));
+    assert(motor_capture.last_percent == 0);
+}
+
+static void test_script_load_brake_sweep_rejects_invalid_values(void)
+{
+    command_service_t service;
+    runtime_parameters_t parameters;
+    telemetry_toggle_t telemetry;
+    motor_test_service_t motor;
+    motor_capture_t motor_capture = {0};
+    output_capture_t capture = {{0}, 0U};
+
+    setup(&service, &parameters, &telemetry, &motor,
+          &motor_capture, &capture);
+
+    feed_text(&service, "script load brake-sweep 25 5000 10\n");
+    assert(service.script_line_count == 0U);
+    assert(strstr(capture.text, "brake-sweep requires") != NULL);
+
+    feed_text(&service, "script load brake-sweep 40 5000 15\n");
+    assert(service.script_line_count == 11U);
+    assert(strstr(capture.text, "brake_pct=15") != NULL);
+    assert(strstr(capture.text, "[OK] script loaded") != NULL);
+}
+
 int main(void)
 {
     test_telemetry_command_and_button_share_state();
@@ -546,6 +595,8 @@ int main(void)
     test_script_records_safe_lines_without_running_them();
     test_script_rejects_unsafe_recorded_lines();
     test_script_run_requires_arm_and_sequences_motor_wait_motor();
+    test_script_load_brake_sweep_generates_repeat_template();
+    test_script_load_brake_sweep_rejects_invalid_values();
 
     printf("PASS: command service tests\n");
     return 0;

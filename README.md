@@ -138,6 +138,19 @@ run after a single manual arm. Recording only stores whitelisted lines; it does
 not start the motor:
 
 ```text
+script load brake-sweep 50 5000
+script list
+motor arm
+script run
+```
+
+`script load brake-sweep <drive_pct> <drive_ms> [brake_pct]` expands to three
+right/left `motor brake-response` pairs with 5 second waits between tests.
+When `brake_pct` is omitted, it defaults to 10%. The accepted ranges remain the
+same as `motor brake-response`: 30% to 80%, 1000 to 10000 ms, and 10% to 20%.
+Manual recording is still available for custom sequences:
+
+```text
 script clear
 script begin
 motor brake-response right 50 5000 10
