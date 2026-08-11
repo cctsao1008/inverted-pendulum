@@ -7,10 +7,12 @@
 #include "board_clock.h"
 #include "board_encoder.h"
 #include "board_led.h"
+#include "board_motor.h"
 #include "board_profile.h"
 #include "board_time.h"
 #include "board_uart.h"
 #include "command_service.h"
+#include "motor_test_service.h"
 #include "pendulum_angle.h"
 #include "runtime_parameters.h"
 #include "telemetry_toggle.h"
@@ -27,6 +29,14 @@ static void command_write(
     board_uart_write(text, (uint32_t)strlen(text));
 }
 
+static void motor_test_output(
+    int8_t signed_percent,
+    void *context)
+{
+    (void)context;
+    board_motor_set_percent(signed_percent);
+}
+
 int main(void)
 {
     uint32_t last_tick;
@@ -34,10 +44,12 @@ int main(void)
     uint32_t led_divider = 0U;
     telemetry_toggle_t telemetry_toggle;
     runtime_parameters_t parameters;
+    motor_test_service_t motor_test;
     command_service_t command_service;
 
     board_clock_init();
     board_led_init();
+    board_motor_init();
     board_button_init();
     board_uart_init(115200U);
     board_adc_init();
@@ -50,10 +62,15 @@ int main(void)
         board_button_is_m_pressed(),
         board_time_ticks());
     runtime_parameters_init_defaults(&parameters);
+    motor_test_service_init(
+        &motor_test,
+        motor_test_output,
+        NULL);
     command_service_init(
         &command_service,
         &parameters,
         &telemetry_toggle,
+        &motor_test,
         command_write,
         NULL);
 
@@ -74,7 +91,8 @@ int main(void)
            (int)parameters.pendulum_direction);
     printf("[TELEM] M button PA3 toggles output; default=off rate=%u Hz\n",
            (unsigned int)parameters.telemetry_rate_hz);
-    printf("[SAFE] motor output not initialized\n");
+    printf("[MOTOR] PB1 TIM3_CH4 20kHz; PB13/BIN1 PB12/BIN2\n");
+    printf("[SAFE] motor stopped; test limit=20%% max=2000ms; type motor status\n");
 
     last_tick = board_time_ticks();
 
@@ -93,8 +111,8 @@ int main(void)
         }
 
         /*
-         * Process one sample for each elapsed tick. During this sensor-only
-         * phase, an occasional UART delay does not command the motor.
+         * Process one sample and advance the bounded motor-test timeout for
+         * each elapsed 1 ms tick. Closed-loop motor control is not connected.
          */
         while (last_tick != current_tick) {
             uint32_t timestamp_us;
@@ -102,6 +120,7 @@ int main(void)
             int32_t encoder_count;
             float pendulum_angle_rad;
             bool telemetry_changed;
+            bool motor_test_completed;
 
             last_tick++;
 
@@ -116,6 +135,13 @@ int main(void)
                 parameters.pendulum_direction);
 
             board_profile_low();
+
+            motor_test_completed =
+                motor_test_service_update_1ms(&motor_test);
+
+            if (motor_test_completed) {
+                printf("[MOTOR] test complete output_pct=0 armed=0\n");
+            }
 
             telemetry_changed = telemetry_toggle_update(
                 &telemetry_toggle,

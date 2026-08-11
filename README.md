@@ -5,7 +5,7 @@ From-scratch embedded firmware and control software for a rotary inverted pendul
 The project currently targets the original **Forest S1 STM32F103C8T6 controller plus Forest D1 baseboard (2016 revision)** as the hardware baseline. Platform-independent control modules are developed and tested on the host before they are connected to real motor output.
 
 > [!CAUTION]
-> The current firmware application is still **sensor-only**. Motor output is not initialized, and the balance controller is not yet connected to the real-time firmware loop. Keep motor power disconnected during initial bring-up and sensor verification.
+> The balance controller is not yet connected to physical motor output. The firmware provides only a deliberately bounded maintenance test: explicit arm, maximum `20%` command, maximum `2000 ms`, automatic stop, and automatic disarm. Lift and secure the mechanism before testing, keep clear of the rotating arm, and use a current-limited motor supply.
 >
 > The firmware now configures the 2016 Forest D1 schematic input at **PA7 / ADC1_IN7**, but the sensor zero, range, direction, wiring, and physical signal are not yet verified. Do not use the ADC reading for control until that physical validation is complete.
 
@@ -20,6 +20,7 @@ The `main` branch contains these foundations:
 - M-button-controlled UART telemetry at 115200 baud and 10 Hz when enabled
 - Text UART command interface and RAM-only runtime parameter registry
 - Wrap-safe pendulum ADC conversion to `[-pi, pi)`
+- Bounded Motor B maintenance test on PB1/PB12/PB13
 - Control-loop timing profiling output
 - Platform-independent control configuration
 - Fail-closed safety state machine
@@ -27,7 +28,7 @@ The `main` branch contains these foundations:
 - Four-state balance controller using `u = -Kx`
 - Five host-side unit-test suites
 
-The estimator, controller, and safety modules exist in `control/`, but `app/main.c` currently performs sensor acquisition, angle conversion, commands, and telemetry only.
+The estimator, controller, and safety modules exist in `control/`, but `app/main.c` does not yet connect them to motor output. The motor interface is available only through the bounded UART maintenance command.
 
 The communication architecture keeps text mode for maintenance and reserves Micro XRCE-DDS for a measured feasibility milestone. COBS is intentionally not implemented. See [Communication and Parameter Architecture](docs/architecture/communications.md).
 
@@ -53,7 +54,7 @@ Before V0.6 is connected to hardware, the PA7 pendulum ADC mapping, sensor zero,
 | Maintenance interface | USART1 on PA9/PA10, 115200 baud; text commands and telemetry |
 | Telemetry control | PA3 M button or `telem on/off`; default off; runtime rate 1–20 Hz |
 | Motor B control | PB1 / TIM3_CH4 PWM, PB13 / BIN1, PB12 / BIN2 |
-| Motor output | Not initialized in the current application |
+| Motor output | Maintenance test only: 20 kHz PWM, `±20%` maximum, 2 s maximum |
 
 See [Forest D1 2016 hardware baseline](docs/hardware/forest-d1-2016-baseline.md) for the schematic-derived pin map, revision boundary, electrical observations, firmware discrepancy, and physical validation checklist.
 
@@ -138,14 +139,29 @@ build/stm32f103/inverted-pendulum.map
 
 ## Bring-up sequence
 
-1. Keep motor power disconnected.
+1. Keep motor power disconnected for the initial boot and sensor checks.
 2. Flash the STM32F103 firmware.
 3. Confirm the status LED and boot messages.
 4. Confirm the boot message reports PA7 / ADC1_IN7.
 5. Press the PA3 M button once and verify 10 Hz UART sensor telemetry; press it again to stop the output.
 6. Run `status`, `param list`, and `transport status` from the UART terminal.
 7. Check ADC range, encoder direction, zero offsets, wrapped angle, and timing.
-8. Enable motor-related work only after sensor signs, scales, limits, and fail-closed behavior are confirmed.
+8. Lift and mechanically secure the unit so the arm can rotate without contact. Use a current-limited motor supply and keep an immediate power disconnect within reach.
+9. With motor power still disconnected, run `motor status`, `motor arm`, and `motor test 5 100`; verify the command automatically returns to stopped/disarmed.
+10. Connect motor power and repeat the minimum test. `motor stop` is available at any time. Re-arm before every test.
+11. Test the opposite direction with `motor arm` followed by `motor test -5 100`. Increase duty or duration only if required, never beyond the firmware limits.
+
+Motor maintenance commands:
+
+```text
+motor status
+motor arm
+motor test <signed_percent> <duration_ms>
+motor stop
+motor disarm
+```
+
+`motor arm` expires after 5 seconds if no test starts. A test accepts `-20..-1` or `1..20` percent and `50..2000 ms`. Every completion and explicit stop forces PWM to zero, sets BIN1/BIN2 low, and disarms the interface. This is a software safety layer, not a substitute for current limiting, physical guarding, or a hardware emergency disconnect.
 
 ## Development principles
 

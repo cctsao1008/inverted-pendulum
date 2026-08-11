@@ -13,6 +13,17 @@ typedef struct {
     size_t length;
 } output_capture_t;
 
+typedef struct {
+    int8_t last_percent;
+} motor_capture_t;
+
+static void capture_motor_output(int8_t signed_percent, void *context)
+{
+    motor_capture_t *capture = context;
+
+    capture->last_percent = signed_percent;
+}
+
 static void capture_write(const char *text, void *context)
 {
     output_capture_t *capture = context;
@@ -41,15 +52,22 @@ static void setup(
     command_service_t *service,
     runtime_parameters_t *parameters,
     telemetry_toggle_t *telemetry,
+    motor_test_service_t *motor,
+    motor_capture_t *motor_capture,
     output_capture_t *capture)
 {
     memset(capture, 0, sizeof(*capture));
     runtime_parameters_init_defaults(parameters);
     telemetry_toggle_init(telemetry, false, 0U);
+    motor_test_service_init(
+        motor,
+        capture_motor_output,
+        motor_capture);
     command_service_init(
         service,
         parameters,
         telemetry,
+        motor,
         capture_write,
         capture);
 }
@@ -59,9 +77,12 @@ static void test_telemetry_command_and_button_share_state(void)
     command_service_t service;
     runtime_parameters_t parameters;
     telemetry_toggle_t telemetry;
+    motor_test_service_t motor;
+    motor_capture_t motor_capture = {0};
     output_capture_t capture;
 
-    setup(&service, &parameters, &telemetry, &capture);
+    setup(&service, &parameters, &telemetry, &motor,
+          &motor_capture, &capture);
 
     feed_text(&service, "telem on\r\n");
     assert(telemetry_toggle_is_enabled(&telemetry));
@@ -76,9 +97,12 @@ static void test_parameter_set_changes_active_value(void)
     command_service_t service;
     runtime_parameters_t parameters;
     telemetry_toggle_t telemetry;
+    motor_test_service_t motor;
+    motor_capture_t motor_capture = {0};
     output_capture_t capture;
 
-    setup(&service, &parameters, &telemetry, &capture);
+    setup(&service, &parameters, &telemetry, &motor,
+          &motor_capture, &capture);
 
     feed_text(
         &service,
@@ -94,9 +118,12 @@ static void test_invalid_rate_is_rejected(void)
     command_service_t service;
     runtime_parameters_t parameters;
     telemetry_toggle_t telemetry;
+    motor_test_service_t motor;
+    motor_capture_t motor_capture = {0};
     output_capture_t capture;
 
-    setup(&service, &parameters, &telemetry, &capture);
+    setup(&service, &parameters, &telemetry, &motor,
+          &motor_capture, &capture);
 
     feed_text(&service, "telem rate 100\n");
 
@@ -109,9 +136,12 @@ static void test_transport_status_records_architecture_decision(void)
     command_service_t service;
     runtime_parameters_t parameters;
     telemetry_toggle_t telemetry;
+    motor_test_service_t motor;
+    motor_capture_t motor_capture = {0};
     output_capture_t capture;
 
-    setup(&service, &parameters, &telemetry, &capture);
+    setup(&service, &parameters, &telemetry, &motor,
+          &motor_capture, &capture);
 
     feed_text(&service, "transport status\n");
 
@@ -125,10 +155,13 @@ static void test_overlong_line_is_discarded(void)
     command_service_t service;
     runtime_parameters_t parameters;
     telemetry_toggle_t telemetry;
+    motor_test_service_t motor;
+    motor_capture_t motor_capture = {0};
     output_capture_t capture;
     uint32_t index;
 
-    setup(&service, &parameters, &telemetry, &capture);
+    setup(&service, &parameters, &telemetry, &motor,
+          &motor_capture, &capture);
 
     for (index = 0U;
          index < COMMAND_SERVICE_LINE_CAPACITY + 10U;
@@ -139,7 +172,41 @@ static void test_overlong_line_is_discarded(void)
     feed_text(&service, "status\n");
 
     assert(strstr(capture.text, "command line too long") != NULL);
-    assert(strstr(capture.text, "motor=disabled") != NULL);
+    assert(strstr(capture.text, "motor=stopped") != NULL);
+}
+
+static void test_motor_command_requires_arm_and_runs_bounded_test(void)
+{
+    command_service_t service;
+    runtime_parameters_t parameters;
+    telemetry_toggle_t telemetry;
+    motor_test_service_t motor;
+    motor_capture_t motor_capture = {0};
+    output_capture_t capture;
+
+    setup(&service, &parameters, &telemetry, &motor,
+          &motor_capture, &capture);
+
+    feed_text(&service, "motor test 10 100\n");
+    assert(motor_capture.last_percent == 0);
+    assert(strstr(capture.text, "motor is not armed") != NULL);
+
+    feed_text(&service, "motor arm\n");
+    feed_text(&service, "motor test -10 100\n");
+    assert(motor_capture.last_percent == 0);
+    assert(motor_test_service_is_active(&motor));
+    assert(!motor_test_service_update_1ms(&motor));
+    assert(motor_capture.last_percent == -10);
+
+    feed_text(&service, "motor stop\n");
+    assert(motor_capture.last_percent == 0);
+    assert(!motor_test_service_is_armed(&motor));
+    assert(!motor_test_service_is_active(&motor));
+
+    feed_text(&service, "motor arm\n");
+    feed_text(&service, "motor test 21 100\n");
+    assert(!motor_test_service_is_armed(&motor));
+    assert(motor_capture.last_percent == 0);
 }
 
 int main(void)
@@ -149,6 +216,7 @@ int main(void)
     test_invalid_rate_is_rejected();
     test_transport_status_records_architecture_decision();
     test_overlong_line_is_discarded();
+    test_motor_command_requires_arm_and_runs_bounded_test();
 
     printf("PASS: command service tests\n");
     return 0;

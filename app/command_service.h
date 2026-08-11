@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include "motor_test_service.h"
 #include "runtime_parameters.h"
 #include "telemetry_toggle.h"
 
@@ -15,6 +16,7 @@ typedef void (*command_service_write_fn)(
 typedef struct {
     runtime_parameters_t *parameters;
     telemetry_toggle_t *telemetry;
+    motor_test_service_t *motor;
     command_service_write_fn write;
     void *write_context;
     char line[COMMAND_SERVICE_LINE_CAPACITY];
@@ -26,6 +28,7 @@ void command_service_init(
     command_service_t *service,
     runtime_parameters_t *parameters,
     telemetry_toggle_t *telemetry,
+    motor_test_service_t *motor,
     command_service_write_fn write,
     void *write_context);
 

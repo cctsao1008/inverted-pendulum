@@ -119,7 +119,11 @@ Because STBY is not MCU-controlled, firmware cannot use it as an independent har
 - direction pins to a defined safe state
 - no actuator command until initialization and safety checks complete
 
-Physical motor output remains outside the current sensor-only firmware scope.
+The firmware now initializes this interface in a safe stopped state and exposes
+only a bounded maintenance test. It does not connect the balance controller to
+the motor. Each test requires an explicit arm, is limited to 20% duty and 2 s,
+then forces PWM to zero, drives BIN1/BIN2 low, and disarms. The arm latch also
+expires after 5 s if no test is started.
 
 ### Logic-level review point
 
@@ -152,8 +156,8 @@ Keep motor power disconnected for all steps below.
 8. Validate PA6 voltage-sense scaling against a trusted meter at more than one voltage.
 9. With PWM forced to zero, verify PB1, PB12, and PB13 startup and reset levels.
 10. Review the TB6612 3.3 V-to-5 V logic margin on the physical board.
-11. Only after the above evidence is recorded, proceed with sensor-only V0.6 pipeline integration.
-12. Enable physical motor output only in a later explicit, reviewable safety milestone.
+11. Lift and secure the mechanism, apply a current-limited motor supply, and verify the bounded `motor test` command first at 5% for 100 ms.
+12. Record positive/negative motor direction, startup/reset output levels, and automatic-stop behavior before connecting any closed-loop controller.
 
 ## Revision rule
 

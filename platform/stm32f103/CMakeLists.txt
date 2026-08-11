@@ -22,6 +22,7 @@ add_custom_target(libopencm3_stm32f1_build
 add_executable(${TARGET_NAME}
     ${PROJECT_SOURCE_DIR}/app/command_service.c
     ${PROJECT_SOURCE_DIR}/app/main.c
+    ${PROJECT_SOURCE_DIR}/app/motor_test_service.c
     ${PROJECT_SOURCE_DIR}/app/pendulum_angle.c
     ${PROJECT_SOURCE_DIR}/app/runtime_parameters.c
     ${PROJECT_SOURCE_DIR}/app/telemetry_toggle.c
@@ -30,6 +31,7 @@ add_executable(${TARGET_NAME}
     ${PLATFORM_DIR}/board/board_clock.c
     ${PLATFORM_DIR}/board/board_encoder.c
     ${PLATFORM_DIR}/board/board_led.c
+    ${PLATFORM_DIR}/board/board_motor.c
     ${PLATFORM_DIR}/board/board_profile.c
     ${PLATFORM_DIR}/board/board_time.c
     ${PLATFORM_DIR}/board/board_uart.c

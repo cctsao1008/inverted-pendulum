@@ -1,7 +1,10 @@
 #include "command_service.h"
 
+#include <errno.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define COMMAND_MAX_ARGUMENTS 5U
@@ -59,17 +62,157 @@ static size_t split_arguments(
     return count;
 }
 
+static bool parse_int32(const char *text, int32_t *value)
+{
+    char *end = NULL;
+    long parsed;
+
+    errno = 0;
+    parsed = strtol(text, &end, 10);
+
+    if ((errno != 0) ||
+        (end == text) ||
+        (*end != '\0') ||
+        (parsed < INT32_MIN) ||
+        (parsed > INT32_MAX)) {
+        return false;
+    }
+
+    *value = (int32_t)parsed;
+    return true;
+}
+
 static void execute_status(command_service_t *service)
 {
     write_response(
         service,
-        "[OK] motor=disabled transport=text telemetry=%s "
-        "rate_hz=%u param_dirty=%u persistence=unavailable\n",
+        "[OK] motor=%s armed=%u arm_remaining_ms=%u output_pct=%d "
+        "remaining_ms=%u "
+        "transport=text telemetry=%s rate_hz=%u param_dirty=%u "
+        "persistence=unavailable\n",
+        motor_test_service_is_active(service->motor)
+            ? "test-active"
+            : "stopped",
+        motor_test_service_is_armed(service->motor) ? 1U : 0U,
+        (unsigned int)motor_test_service_arm_remaining_ms(service->motor),
+        (int)motor_test_service_percent(service->motor),
+        (unsigned int)motor_test_service_remaining_ms(service->motor),
         telemetry_toggle_is_enabled(service->telemetry)
             ? "on"
             : "off",
         (unsigned int)service->parameters->telemetry_rate_hz,
         runtime_parameters_is_dirty(service->parameters) ? 1U : 0U);
+}
+
+static void execute_motor(
+    command_service_t *service,
+    size_t count,
+    char **arguments)
+{
+    int32_t percent;
+    int32_t duration_ms;
+    motor_test_result_t result;
+
+    if ((count == 2U) &&
+        (strcmp(arguments[1], "status") == 0)) {
+        write_response(
+            service,
+            "[OK] motor=%s armed=%u arm_remaining_ms=%u output_pct=%d "
+            "remaining_ms=%u "
+            "limit_pct=%u duration_ms=%u..%u\n",
+            motor_test_service_is_active(service->motor)
+                ? "test-active"
+                : "stopped",
+            motor_test_service_is_armed(service->motor) ? 1U : 0U,
+            (unsigned int)
+                motor_test_service_arm_remaining_ms(service->motor),
+            (int)motor_test_service_percent(service->motor),
+            (unsigned int)motor_test_service_remaining_ms(service->motor),
+            (unsigned int)MOTOR_TEST_MAX_PERCENT,
+            (unsigned int)MOTOR_TEST_MIN_DURATION_MS,
+            (unsigned int)MOTOR_TEST_MAX_DURATION_MS);
+        return;
+    }
+
+    if ((count == 2U) &&
+        (strcmp(arguments[1], "arm") == 0)) {
+        if (motor_test_service_arm(service->motor)) {
+            write_response(
+                service,
+                "[OK] motor armed for one bounded test; expires in %u ms; "
+                "use motor test <signed_pct> <duration_ms>\n",
+                (unsigned int)MOTOR_TEST_ARM_WINDOW_MS);
+        } else {
+            write_response(service, "[ERR] motor test already active\n");
+        }
+        return;
+    }
+
+    if ((count == 2U) &&
+        ((strcmp(arguments[1], "stop") == 0) ||
+         (strcmp(arguments[1], "disarm") == 0))) {
+        motor_test_service_disarm(service->motor);
+        write_response(
+            service,
+            "[OK] motor stopped output_pct=0 armed=0\n");
+        return;
+    }
+
+    if ((count == 4U) &&
+        (strcmp(arguments[1], "test") == 0)) {
+        if (!parse_int32(arguments[2], &percent) ||
+            !parse_int32(arguments[3], &duration_ms) ||
+            (duration_ms < 0)) {
+            motor_test_service_disarm(service->motor);
+            write_response(
+                service,
+                "[ERR] motor test requires signed integer percent and "
+                "duration_ms\n");
+            return;
+        }
+
+        result = motor_test_service_start(
+            service->motor,
+            percent,
+            (uint32_t)duration_ms);
+
+        if (result == MOTOR_TEST_OK) {
+            write_response(
+                service,
+                "[OK] motor test active output_pct=%ld duration_ms=%ld; "
+                "auto-stop and auto-disarm enabled\n",
+                (long)percent,
+                (long)duration_ms);
+            return;
+        }
+
+        /* Any rejected test request fails closed and clears the arm latch. */
+        motor_test_service_disarm(service->motor);
+
+        if (result == MOTOR_TEST_NOT_ARMED) {
+            write_response(service, "[ERR] motor is not armed\n");
+        } else if (result == MOTOR_TEST_ALREADY_ACTIVE) {
+            write_response(service, "[ERR] motor test already active\n");
+        } else if (result == MOTOR_TEST_INVALID_PERCENT) {
+            write_response(
+                service,
+                "[ERR] signed percent must be -%u..-1 or 1..%u\n",
+                (unsigned int)MOTOR_TEST_MAX_PERCENT,
+                (unsigned int)MOTOR_TEST_MAX_PERCENT);
+        } else {
+            write_response(
+                service,
+                "[ERR] duration_ms must be %u..%u\n",
+                (unsigned int)MOTOR_TEST_MIN_DURATION_MS,
+                (unsigned int)MOTOR_TEST_MAX_DURATION_MS);
+        }
+        return;
+    }
+
+    write_response(
+        service,
+        "[ERR] usage: motor status|arm|test <signed_pct> "
+        "<duration_ms>|stop|disarm\n");
 }
 
 static void execute_telemetry(
@@ -274,11 +417,13 @@ void command_service_init(
     command_service_t *service,
     runtime_parameters_t *parameters,
     telemetry_toggle_t *telemetry,
+    motor_test_service_t *motor,
     command_service_write_fn write,
     void *write_context)
 {
     service->parameters = parameters;
     service->telemetry = telemetry;
+    service->motor = motor;
     service->write = write;
     service->write_context = write_context;
     service->length = 0U;
@@ -304,7 +449,7 @@ void command_service_execute_line(
         (strcmp(arguments[0], "help") == 0)) {
         write_response(
             service,
-            "[OK] commands: help status telem param transport\n");
+            "[OK] commands: help status telem param transport motor\n");
     } else if ((count == 1U) &&
                (strcmp(arguments[0], "status") == 0)) {
         execute_status(service);
@@ -314,6 +459,8 @@ void command_service_execute_line(
         execute_parameter(service, count, arguments);
     } else if (strcmp(arguments[0], "transport") == 0) {
         execute_transport(service, count, arguments);
+    } else if (strcmp(arguments[0], "motor") == 0) {
+        execute_motor(service, count, arguments);
     } else {
         write_response(
             service,

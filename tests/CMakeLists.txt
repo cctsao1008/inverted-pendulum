@@ -146,6 +146,7 @@ add_test(
 add_executable(test_command_service
     test_command_service.c
     ${PROJECT_SOURCE_DIR}/app/command_service.c
+    ${PROJECT_SOURCE_DIR}/app/motor_test_service.c
     ${PROJECT_SOURCE_DIR}/app/runtime_parameters.c
     ${PROJECT_SOURCE_DIR}/app/telemetry_toggle.c
 )
@@ -164,4 +165,25 @@ target_compile_options(test_command_service PRIVATE
 add_test(
     NAME command_service
     COMMAND test_command_service
+)
+
+add_executable(test_motor_test_service
+    test_motor_test_service.c
+    ${PROJECT_SOURCE_DIR}/app/motor_test_service.c
+)
+
+target_include_directories(test_motor_test_service PRIVATE
+    ${PROJECT_SOURCE_DIR}/app
+)
+
+target_compile_options(test_motor_test_service PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME motor_test_service
+    COMMAND test_motor_test_service
 )
