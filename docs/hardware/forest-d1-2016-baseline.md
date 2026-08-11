@@ -125,22 +125,18 @@ Physical motor output remains outside the current sensor-only firmware scope.
 
 The schematic shows the TB6612 logic supply at 5 V while STM32 GPIO outputs are 3.3 V. A 3.3 V high level is below a conservative `0.7 × VCC = 3.5 V` threshold calculation. The assembled product may operate, but this should be treated as an electrical margin concern and verified against the exact populated driver variant, its datasheet, temperature range, and measured input levels before relying on it for robust operation.
 
-## Current firmware discrepancy
+## Firmware mapping status
 
-The current `main` source does not yet match the 2016 Forest D1 pendulum input:
+The firmware now matches the 2016 Forest D1 schematic mapping:
 
-| File | Current source | Required 2016 mapping |
-|---|---|---|
-| `platform/stm32f103/board/board_adc.c` | `ADC_CHANNEL3`, `GPIO3` | `ADC_CHANNEL7`, `GPIO7` |
-| `app/main.c` | boot text reports `PA3 ADC1_IN3` | report `PA7 ADC1_IN7` |
+| File | Configured 2016 mapping |
+|---|---|
+| `platform/stm32f103/board/board_adc.c` | `ADC_CHANNEL7`, `GPIO7` |
+| `app/main.c` | boot text reports `PA7 ADC1_IN7` |
 
-Impact:
+This source-level correction does not complete physical validation. PA3 remains the Forest D1 M-button input, and the PA7 telemetry must not be treated as a calibrated pendulum-angle signal until its wiring, zero, range, direction, and electrical limits are measured on the assembled unit.
 
-- PA3 is the Forest D1 M-button input.
-- The current pendulum ADC telemetry must not be treated as a valid pendulum-angle signal.
-- V0.6 control-pipeline work must not be connected to motor output until the mismatch is corrected and the PA7 signal is physically verified.
-
-The correction should be made in a dedicated firmware PR with a successful STM32 build and physical sensor telemetry evidence. It is intentionally not included in this documentation-only PR.
+V0.6 control-pipeline work must not be connected to motor output until the PA7 signal is physically verified.
 
 ## Physical validation checklist
 
@@ -149,7 +145,7 @@ Keep motor power disconnected for all steps below.
 1. Confirm the actual controller and baseboard markings match the Forest S1 / Forest D1 2016 revision.
 2. Confirm 8 MHz at the STM32 HSE circuit and distinguish it from the CH340G 12 MHz crystal.
 3. Measure the sensor connector supply and ground before attaching the WDD35D4.
-4. Update the firmware ADC input to PA7 / ADC1_IN7.
+4. Confirm the firmware reports and samples PA7 / ADC1_IN7.
 5. Record raw ADC values at upright, representative positive/negative angles, and near both electrical limits.
 6. Establish the pendulum zero offset, sign, usable range, and fault thresholds.
 7. Rotate the arm manually and record encoder count direction and counts per revolution.

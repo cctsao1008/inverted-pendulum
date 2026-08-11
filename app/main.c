@@ -36,7 +36,7 @@ int main(void)
            (unsigned long)board_clock_get_hz());
     printf("[LOOP] control=%lu Hz telemetry=100 Hz\n",
            (unsigned long)CONTROL_FREQUENCY_HZ);
-    printf("[ADC] PA3 ADC1_IN3\n");
+    printf("[ADC] PA7 ADC1_IN7\n");
     printf("[ENC] PB6/PB7 TIM4 quadrature x4\n");
     printf("[SAFE] motor output not initialized\n");
 

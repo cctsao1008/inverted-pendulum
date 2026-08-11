@@ -4,7 +4,7 @@
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
 
-#define PENDULUM_ADC_CHANNEL ADC_CHANNEL3
+#define PENDULUM_ADC_CHANNEL ADC_CHANNEL7
 
 void board_adc_init(void)
 {
@@ -16,13 +16,13 @@ void board_adc_init(void)
     rcc_periph_clock_enable(RCC_ADC1);
 
     /*
-     * PA3 = ADC1_IN3.
+     * PA7 = ADC1_IN7 on the Forest D1 2016 baseboard.
      */
     gpio_set_mode(
         GPIOA,
         GPIO_MODE_INPUT,
         GPIO_CNF_INPUT_ANALOG,
-        GPIO3);
+        GPIO7);
 
     /*
      * PCLK2 = 72 MHz; ADC clock = 72 / 6 = 12 MHz.
