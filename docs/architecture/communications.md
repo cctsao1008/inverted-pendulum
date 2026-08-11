@@ -22,7 +22,7 @@ adapts that data without introducing DDS types into the control core.
 
 The current firmware always boots with:
 
-- motor output uninitialized;
+- Motor B initialized stopped and disarmed;
 - text transport active;
 - telemetry disabled;
 - runtime parameters restored to compiled defaults.
@@ -44,16 +44,27 @@ param set <name> <value>
 param defaults
 
 transport status
+
+motor status
+motor arm
+motor test <signed_percent> <duration_ms>
+motor stop
+motor disarm
 ```
 
 `param set` changes only the active RAM value. `param save` and `param load`
 deliberately return an error until versioned, CRC-protected Flash storage is
 implemented. Motor arm state and telemetry enable state must never be saved.
 
+The text-mode motor command is a local maintenance test, not an operational
+control transport. Arming expires after 5 s, every test is limited to 20% and
+2 s, and completion forces a stop and disarm. XRCE-DDS motor arm remains out of
+scope.
+
 The PA3 M button and text commands update the same telemetry state. The last
 valid operation wins. Text telemetry is capped at 20 Hz because the current
-USART1 transmit path is blocking and the firmware is still in sensor-only
-bring-up.
+USART1 transmit path is blocking and high-rate telemetry is not required for
+maintenance bring-up.
 
 ## Runtime parameters
 
