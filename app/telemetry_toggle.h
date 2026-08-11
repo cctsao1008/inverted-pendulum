@@ -24,4 +24,10 @@ bool telemetry_toggle_update(
 
 bool telemetry_toggle_is_enabled(const telemetry_toggle_t *toggle);
 
+bool telemetry_toggle_set_enabled(
+    telemetry_toggle_t *toggle,
+    bool enabled);
+
+bool telemetry_toggle_toggle(telemetry_toggle_t *toggle);
+
 #endif

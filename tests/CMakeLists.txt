@@ -100,3 +100,68 @@ add_test(
     NAME telemetry_toggle
     COMMAND test_telemetry_toggle
 )
+
+add_executable(test_pendulum_angle
+    test_pendulum_angle.c
+    ${PROJECT_SOURCE_DIR}/app/pendulum_angle.c
+)
+
+target_include_directories(test_pendulum_angle PRIVATE
+    ${PROJECT_SOURCE_DIR}/app
+)
+
+target_compile_options(test_pendulum_angle PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME pendulum_angle
+    COMMAND test_pendulum_angle
+)
+
+add_executable(test_runtime_parameters
+    test_runtime_parameters.c
+    ${PROJECT_SOURCE_DIR}/app/runtime_parameters.c
+)
+
+target_include_directories(test_runtime_parameters PRIVATE
+    ${PROJECT_SOURCE_DIR}/app
+)
+
+target_compile_options(test_runtime_parameters PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME runtime_parameters
+    COMMAND test_runtime_parameters
+)
+
+add_executable(test_command_service
+    test_command_service.c
+    ${PROJECT_SOURCE_DIR}/app/command_service.c
+    ${PROJECT_SOURCE_DIR}/app/runtime_parameters.c
+    ${PROJECT_SOURCE_DIR}/app/telemetry_toggle.c
+)
+
+target_include_directories(test_command_service PRIVATE
+    ${PROJECT_SOURCE_DIR}/app
+)
+
+target_compile_options(test_command_service PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME command_service
+    COMMAND test_command_service
+)

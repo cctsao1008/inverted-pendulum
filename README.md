@@ -18,6 +18,8 @@ The `main` branch contains these foundations:
 - Sensor-acquisition framework with the pendulum ADC mapped to PA7 / ADC1_IN7
 - Arm quadrature-encoder acquisition
 - M-button-controlled UART telemetry at 115200 baud and 10 Hz when enabled
+- Text UART command interface and RAM-only runtime parameter registry
+- Wrap-safe pendulum ADC conversion to `[-pi, pi)`
 - Control-loop timing profiling output
 - Platform-independent control configuration
 - Fail-closed safety state machine
@@ -25,7 +27,9 @@ The `main` branch contains these foundations:
 - Four-state balance controller using `u = -Kx`
 - Five host-side unit-test suites
 
-The estimator, controller, and safety modules exist in `control/`, but `app/main.c` currently performs sensor acquisition and telemetry only.
+The estimator, controller, and safety modules exist in `control/`, but `app/main.c` currently performs sensor acquisition, angle conversion, commands, and telemetry only.
+
+The communication architecture keeps text mode for maintenance and reserves Micro XRCE-DDS for a measured feasibility milestone. COBS is intentionally not implemented. See [Communication and Parameter Architecture](docs/architecture/communications.md).
 
 ### Next milestone
 
@@ -46,7 +50,8 @@ Before V0.6 is connected to hardware, the PA7 pendulum ADC mapping, sensor zero,
 | Pendulum input | **PA7 / ADC1_IN7**; firmware-mapped, physical signal verification pending |
 | Battery voltage input | PA6 / ADC1_IN6 through a 10 kΩ / 1 kΩ divider |
 | Arm encoder | TIM4 quadrature input on PB6/PB7 |
-| Telemetry | USART1 on PA9/PA10, 115200 baud; PA3 M button toggles 10 Hz output; default off |
+| Maintenance interface | USART1 on PA9/PA10, 115200 baud; text commands and telemetry |
+| Telemetry control | PA3 M button or `telem on/off`; default off; runtime rate 1–20 Hz |
 | Motor B control | PB1 / TIM3_CH4 PWM, PB13 / BIN1, PB12 / BIN2 |
 | Motor output | Not initialized in the current application |
 
@@ -138,8 +143,9 @@ build/stm32f103/inverted-pendulum.map
 3. Confirm the status LED and boot messages.
 4. Confirm the boot message reports PA7 / ADC1_IN7.
 5. Press the PA3 M button once and verify 10 Hz UART sensor telemetry; press it again to stop the output.
-6. Check ADC range, encoder direction, zero offsets, and timing.
-7. Enable motor-related work only after sensor signs, scales, limits, and fail-closed behavior are confirmed.
+6. Run `status`, `param list`, and `transport status` from the UART terminal.
+7. Check ADC range, encoder direction, zero offsets, wrapped angle, and timing.
+8. Enable motor-related work only after sensor signs, scales, limits, and fail-closed behavior are confirmed.
 
 ## Development principles
 
