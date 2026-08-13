@@ -210,3 +210,23 @@ add_test(
     NAME motion_observer
     COMMAND test_motion_observer
 )
+
+add_executable(test_control_pipeline
+    test_control_pipeline.c
+)
+
+target_link_libraries(test_control_pipeline PRIVATE
+    control_core
+)
+
+target_compile_options(test_control_pipeline PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME control_pipeline
+    COMMAND test_control_pipeline
+)
