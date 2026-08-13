@@ -237,7 +237,7 @@ static void test_duplicate_timestamp_is_rejected(void)
     assert(estimator.previous_timestamp_us == 1000U);
 }
 
-static void test_wrong_sample_interval_is_rejected(void)
+static void test_too_early_sample_is_rejected(void)
 {
     state_estimator_t estimator;
     control_config_t config = make_valid_config();
@@ -250,11 +250,49 @@ static void test_wrong_sample_interval_is_rejected(void)
         &estimator, &config, &input, &state) ==
         STATE_ESTIMATOR_RESULT_INITIALIZED);
 
-    input.timestamp_us += 2000U;
+    input.pendulum_angle_rad = 0.10F;
+    input.timestamp_us += 250U;
 
     assert(state_estimator_step(
         &estimator, &config, &input, &state) ==
         STATE_ESTIMATOR_ERROR_TIMESTAMP);
+    assert(estimator.previous_timestamp_us == 1000U);
+}
+
+static void test_long_gap_reseeds_estimator(void)
+{
+    state_estimator_t estimator;
+    control_config_t config = make_valid_config();
+    state_estimator_input_t input = make_input();
+    control_state_t state;
+
+    config.rate_filter_alpha = 1.0F;
+    state_estimator_init(&estimator);
+
+    assert(state_estimator_step(
+        &estimator, &config, &input, &state) ==
+        STATE_ESTIMATOR_RESULT_INITIALIZED);
+
+    input.pendulum_angle_rad = 0.20F;
+    input.arm_angle_rad = 0.30F;
+    input.timestamp_us += 2000U;
+
+    assert(state_estimator_step(
+        &estimator, &config, &input, &state) ==
+        STATE_ESTIMATOR_RESULT_INITIALIZED);
+    assert(estimator.previous_timestamp_us == input.timestamp_us);
+    assert(state.pendulum_rate_rad_s == 0.0F);
+    assert(state.arm_rate_rad_s == 0.0F);
+
+    input.pendulum_angle_rad += 0.01F;
+    input.arm_angle_rad += 0.02F;
+    input.timestamp_us += 1000U;
+
+    assert(state_estimator_step(
+        &estimator, &config, &input, &state) ==
+        STATE_ESTIMATOR_RESULT_OK);
+    assert(nearly_equal(state.pendulum_rate_rad_s, 10.0F, 0.01F));
+    assert(nearly_equal(state.arm_rate_rad_s, 20.0F, 0.01F));
 }
 
 static void test_uint32_timestamp_wrap_is_supported(void)
@@ -324,7 +362,8 @@ int main(void)
     test_angle_wrap_uses_shortest_delta();
     test_invalid_angle_is_rejected();
     test_duplicate_timestamp_is_rejected();
-    test_wrong_sample_interval_is_rejected();
+    test_too_early_sample_is_rejected();
+    test_long_gap_reseeds_estimator();
     test_uint32_timestamp_wrap_is_supported();
     test_reset_prevents_derivative_kick();
 

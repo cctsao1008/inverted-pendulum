@@ -69,6 +69,24 @@ static void estimator_write_state(
     state->timestamp_us = input->timestamp_us;
 }
 
+static void estimator_seed_from_sample(
+    state_estimator_t *estimator,
+    const state_estimator_input_t *input,
+    control_state_t *state)
+{
+    estimator->initialized = true;
+    estimator->previous_pendulum_angle_rad =
+        input->pendulum_angle_rad;
+    estimator->previous_arm_angle_rad =
+        input->arm_angle_rad;
+    estimator->pendulum_rate_rad_s = 0.0F;
+    estimator->arm_rate_rad_s = 0.0F;
+    estimator->previous_timestamp_us =
+        input->timestamp_us;
+
+    estimator_write_state(estimator, input, state);
+}
+
 void state_estimator_init(state_estimator_t *estimator)
 {
     if (estimator == NULL) {
@@ -122,22 +140,8 @@ state_estimator_result_t state_estimator_step(
     }
 
     if (!estimator->initialized) {
-        estimator->initialized = true;
-
-        estimator->previous_pendulum_angle_rad =
-            input->pendulum_angle_rad;
-        estimator->previous_arm_angle_rad =
-            input->arm_angle_rad;
-
-        estimator->pendulum_rate_rad_s = 0.0F;
-        estimator->arm_rate_rad_s = 0.0F;
-
-        estimator->previous_timestamp_us =
-            input->timestamp_us;
-
-        estimator_write_state(
+        estimator_seed_from_sample(
             estimator, input, state);
-
         return STATE_ESTIMATOR_RESULT_INITIALIZED;
     }
 
@@ -167,9 +171,20 @@ state_estimator_result_t state_estimator_step(
         config->sample_period_s *
         STATE_ESTIMATOR_MAX_PERIOD_RATIO;
 
-    if ((elapsed_s < minimum_period_s) ||
-        (elapsed_s > maximum_period_s)) {
+    if (elapsed_s < minimum_period_s) {
         return STATE_ESTIMATOR_ERROR_TIMESTAMP;
+    }
+
+    if (elapsed_s > maximum_period_s) {
+        /*
+         * A missed real-time interval must not leave the estimator
+         * permanently referenced to an obsolete timestamp. Re-seed from
+         * the current sample and require one fresh interval before rates are
+         * considered ready again.
+         */
+        estimator_seed_from_sample(
+            estimator, input, state);
+        return STATE_ESTIMATOR_RESULT_INITIALIZED;
     }
 
     pendulum_delta_rad = estimator_wrapped_delta(

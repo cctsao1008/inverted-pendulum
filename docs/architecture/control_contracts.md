@@ -1,18 +1,22 @@
 # Control Contracts
 
-This note fixes control-layer semantics before the runtime pipeline is connected to STM32 motor output.
+This note fixes control-layer semantics as the platform-independent pipeline is integrated with the STM32 runtime.
 
 ## Coordinates
 
 `theta` (`pendulum_angle_rad`) is circular and uses wrapped shortest-path deltas in the basic estimator.
 
-`phi` (`arm_angle_rad`) is the continuous accumulated rotor-arm position relative to the defined home/reference. It is not wrapped at `+/-pi`. The STM32 sensor adapter must extend encoder counts wrap-safely before converting them to this coordinate.
+`phi` (`arm_angle_rad`) is the continuous accumulated rotor-arm position relative to the defined home/reference. It is not wrapped at `+/-pi`. The STM32 sensor adapter extends the 16-bit encoder count wrap-safely before converting it to this coordinate.
+
+For the first observe-only runtime integration, the arm position at firmware startup is the temporary `phi = 0` reference. A deliberate homing/reference procedure must replace this boot-time convention before automatic position-regulating control is enabled.
 
 ## Timing
 
 `sample_period_s` defines the nominal cadence and admissible timestamp window. State derivatives use the measured elapsed time between accepted samples so accepted timing jitter does not bias angular-rate estimation.
 
-One control step represents one real sampling interval. Missed control periods must not be replayed as back-to-back catch-up steps with nearly identical wall-clock timestamps. Runtime integration must either execute at the real cadence or record/drop a missed cycle and resume on a later real sampling interval.
+One control step represents one real sampling interval. Missed control periods must not be replayed as back-to-back catch-up steps with nearly identical wall-clock timestamps. Runtime integration records/drops missed control cycles and runs the pipeline only for the newest real sample.
+
+A forward gap longer than the accepted estimator timing window re-seeds estimator position history and clears rate history. That sample is not considered estimate-ready; one later valid real-time interval is required before rates become valid again. Duplicate, too-early, and backwards timestamps remain errors.
 
 ## Configuration ownership
 
@@ -20,7 +24,9 @@ Configuration validation is module-scoped. Estimator validation owns sample peri
 
 `control_config_validate_safety()` currently validates capture/escape sequencing fields retained for the legacy `safety_manager` and future FSM sequencing policy. The authoritative runtime state-safety path uses `state_safety_limits_t` and does not depend on those fields.
 
-An invalid state-safety configuration blocks control through `control_allowed == false`. Whether a configuration issue should latch `FAULT` is a state-machine policy decision rather than an implicit property of the configuration validator.
+The initial application profile is intentionally **observe-only**. It configures only the estimator timing contract and leaves controller gains plus state/output safety limits unconfigured. Therefore `control_allowed` remains false even though acquisition, estimation, and trace are live. This is intentional fail-closed bring-up behavior, not a missing runtime check.
+
+Per-unit calibration such as pendulum upright ADC and direction remains owned by `app/runtime_parameters`. Project/runtime control profile values are owned by `app/control_profile`. Control-layer structs and validators remain the schema and contract boundary.
 
 ## Runtime capability contract
 
@@ -47,8 +53,10 @@ The older `safety_manager` is retained only as a migration source for capture/es
 
 ## Hardware-enable gate
 
-This hardening work does not connect `control_pipeline_step()` to `app/main.c` or enable physical motor output.
+`app/main.c` now supplies real STM32 sensor samples to `control_pipeline_step()` and captures control trace records for diagnostics. Automatic control still has **no physical motor sink**: `control_pipeline_set_motor_output()` is intentionally not called.
 
-For the first STM32 runtime-integration milestone, the control pipeline motor sink must remain unbound. Setting `motor_output_enabled = false` is not by itself sufficient isolation when a physical sink is bound, because fail-closed operation intentionally invokes the sink's safe-off callback.
+Setting `motor_output_enabled = false` is not by itself sufficient isolation when a physical sink is bound, because fail-closed operation intentionally invokes the sink's safe-off callback. The unbound sink is therefore part of the current hardware-isolation contract.
 
-Slew-rate limiting, unsafe direction-reversal handling, explicit maintenance/control motor authority, and brake/coast policy remain required before automatic control is allowed to drive the motor.
+The existing UART maintenance motor path remains independent and is still the only code path that writes the physical motor.
+
+Slew-rate limiting, unsafe direction-reversal handling, explicit maintenance/control motor authority, configured state/output safety limits, verified control gains, and brake/coast policy remain required before automatic control is allowed to drive the motor.

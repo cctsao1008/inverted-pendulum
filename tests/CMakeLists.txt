@@ -352,3 +352,55 @@ add_test(
     NAME control_runtime
     COMMAND test_control_runtime
 )
+
+add_executable(test_control_sensor_adapter
+    test_control_sensor_adapter.c
+    ${PROJECT_SOURCE_DIR}/app/control_sensor_adapter.c
+    ${PROJECT_SOURCE_DIR}/app/pendulum_angle.c
+)
+
+target_include_directories(test_control_sensor_adapter PRIVATE
+    ${PROJECT_SOURCE_DIR}/app
+)
+
+target_link_libraries(test_control_sensor_adapter PRIVATE
+    control_core
+    m
+)
+
+target_compile_options(test_control_sensor_adapter PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME control_sensor_adapter
+    COMMAND test_control_sensor_adapter
+)
+
+add_executable(test_control_profile
+    test_control_profile.c
+    ${PROJECT_SOURCE_DIR}/app/control_profile.c
+)
+
+target_include_directories(test_control_profile PRIVATE
+    ${PROJECT_SOURCE_DIR}/app
+)
+
+target_link_libraries(test_control_profile PRIVATE
+    control_core
+)
+
+target_compile_options(test_control_profile PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME control_profile
+    COMMAND test_control_profile
+)

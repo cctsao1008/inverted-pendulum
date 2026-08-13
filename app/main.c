@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,6 +13,9 @@
 #include "board_time.h"
 #include "board_uart.h"
 #include "command_service.h"
+#include "control_pipeline.h"
+#include "control_profile.h"
+#include "control_sensor_adapter.h"
 #include "motor_test_service.h"
 #include "pendulum_angle.h"
 #include "runtime_parameters.h"
@@ -20,6 +24,11 @@
 #define CONTROL_FREQUENCY_HZ   1000U
 #define BUTTON_DEBOUNCE_TICKS  50U
 #define LED_TOGGLE_TICKS       500U
+
+typedef struct {
+    bool valid;
+    control_trace_record_t latest;
+} control_trace_capture_t;
 
 static void command_write(
     const char *text,
@@ -47,6 +56,46 @@ static uint32_t read_monotonic_milliseconds(void *context)
 {
     (void)context;
     return board_time_ticks();
+}
+
+static uint32_t read_monotonic_microseconds(void *context)
+{
+    (void)context;
+    return board_time_micros();
+}
+
+static void capture_control_trace(
+    const control_trace_record_t *record,
+    void *context)
+{
+    control_trace_capture_t *capture =
+        (control_trace_capture_t *)context;
+
+    if ((record == NULL) || (capture == NULL)) {
+        return;
+    }
+
+    capture->latest = *record;
+    capture->valid = true;
+}
+
+static const char *control_mode_name(control_mode_t mode)
+{
+    switch (mode) {
+    case CONTROL_MODE_DISABLED:
+        return "disabled";
+    case CONTROL_MODE_IDLE:
+        return "idle";
+    case CONTROL_MODE_SWING_UP:
+        return "swing-up";
+    case CONTROL_MODE_CAPTURE:
+        return "capture";
+    case CONTROL_MODE_BALANCE:
+        return "balance";
+    case CONTROL_MODE_FAULT:
+    default:
+        return "fault";
+    }
 }
 
 static int32_t read_motor_encoder(void *context)
@@ -100,6 +149,10 @@ int main(void)
     uint32_t last_tick;
     uint32_t telemetry_phase = 0U;
     uint32_t led_divider = 0U;
+    uint32_t control_missed_cycles = 0U;
+    bool control_runtime_ready;
+    uint16_t last_control_upright_adc;
+    int8_t last_control_pendulum_direction;
     int8_t last_characterize_percent = 0;
     motor_characterize_state_t last_characterize_state =
         MOTOR_CHARACTERIZE_IDLE;
@@ -107,6 +160,10 @@ int main(void)
     runtime_parameters_t parameters;
     motor_test_service_t motor_test;
     command_service_t command_service;
+    control_pipeline_t control_pipeline;
+    control_sensor_adapter_t control_sensor_adapter;
+    app_control_profile_t control_profile;
+    control_trace_capture_t control_trace_capture = {0};
 
     board_clock_init();
     board_led_init();
@@ -123,6 +180,38 @@ int main(void)
         board_button_is_m_pressed(),
         board_time_ticks());
     runtime_parameters_init_defaults(&parameters);
+    last_control_upright_adc = parameters.pendulum_upright_adc;
+    last_control_pendulum_direction = parameters.pendulum_direction;
+
+    app_control_profile_init_observe_only(
+        &control_profile,
+        1.0F / (float)CONTROL_FREQUENCY_HZ);
+
+    control_sensor_adapter_init(
+        &control_sensor_adapter,
+        board_encoder_get_count(),
+        MOTOR_ENCODER_COUNTS_PER_OUTPUT_REV,
+        read_monotonic_microseconds,
+        NULL);
+
+    control_pipeline_init(&control_pipeline);
+    control_runtime_ready =
+        control_pipeline_set_control_config(
+            &control_pipeline,
+            &control_profile.control) &&
+        control_pipeline_set_runtime_config(
+            &control_pipeline,
+            &control_profile.runtime);
+
+    control_pipeline_set_sensor_source(
+        &control_pipeline,
+        control_sensor_adapter_read,
+        &control_sensor_adapter);
+    control_pipeline_set_trace_sink(
+        &control_pipeline,
+        capture_control_trace,
+        &control_trace_capture);
+
     motor_test_service_init_with_encoder(
         &motor_test,
         motor_test_output,
@@ -163,6 +252,10 @@ int main(void)
            (int)parameters.pendulum_direction);
     printf("[TELEM] M button PA3 toggles output; default=off rate=%u Hz\n",
            (unsigned int)parameters.telemetry_rate_hz);
+    printf(
+        "[CONTROL] runtime=%s profile=observe-only motor_sink=unbound "
+        "arm_home=boot-position\n",
+        control_runtime_ready ? "ready" : "config-error");
     printf("[MOTOR] channel=d2 default; d1=PB0/CH3+PB14/PB15; d2=PB1/CH4+PB13/PB12; 20kHz\n");
     printf("[PATTERN] right=+15%%/5s left=-15%%/5s both=right/5s-stop/1s-left/5s\n");
     printf("[COMMISSION] characterize=5..30%% rise/2%% fall/1%%; "
@@ -180,32 +273,79 @@ int main(void)
 
     while (1) {
         uint32_t current_tick = board_time_ticks();
+        uint32_t pending_ticks = current_tick - last_tick;
         char received_character;
 
+        if (pending_ticks > 1U) {
+            uint32_t missed = pending_ticks - 1U;
+
+            if ((UINT32_MAX - control_missed_cycles) < missed) {
+                control_missed_cycles = UINT32_MAX;
+            } else {
+                control_missed_cycles += missed;
+            }
+        }
+
         /*
-         * Drain every tick that existed before accepting a new command.  This
-         * prevents historical scheduler backlog from being charged against a
-         * motor test that is started by that command.
+         * Drain every tick that existed before accepting a new command. This
+         * preserves maintenance-service timing, but the control pipeline runs
+         * only for the newest real sample. Historical control cycles are
+         * recorded as missed rather than replayed back-to-back.
          */
         while (last_tick != current_tick) {
             uint32_t timestamp_us;
             uint16_t adc_raw;
             int32_t encoder_count;
             float pendulum_angle_rad;
+            bool control_cycle_due;
             bool telemetry_changed;
             bool motor_test_completed;
 
             last_tick++;
+            control_cycle_due = (last_tick == current_tick);
 
             board_profile_high();
 
-            timestamp_us = board_time_micros();
             adc_raw = board_adc_read_pendulum_raw();
             encoder_count = board_encoder_get_count();
+            timestamp_us = board_time_micros();
             pendulum_angle_rad = pendulum_angle_radians(
                 adc_raw,
                 parameters.pendulum_upright_adc,
                 parameters.pendulum_direction);
+
+            if (control_cycle_due && control_runtime_ready) {
+                uint16_t vbus_raw = board_adc_read_vbus_raw();
+
+                /*
+                 * Calibration changes redefine theta. Re-seed estimator
+                 * history before the first sample in the new coordinate.
+                 */
+                if ((parameters.pendulum_upright_adc !=
+                     last_control_upright_adc) ||
+                    (parameters.pendulum_direction !=
+                     last_control_pendulum_direction)) {
+                    control_runtime_ready =
+                        control_pipeline_set_control_config(
+                            &control_pipeline,
+                            &control_profile.control);
+                    last_control_upright_adc =
+                        parameters.pendulum_upright_adc;
+                    last_control_pendulum_direction =
+                        parameters.pendulum_direction;
+                }
+
+                control_sensor_adapter_update(
+                    &control_sensor_adapter,
+                    timestamp_us,
+                    adc_raw,
+                    encoder_count,
+                    vbus_raw,
+                    board_adc_vbus_raw_to_millivolts(vbus_raw),
+                    parameters.pendulum_upright_adc,
+                    parameters.pendulum_direction);
+                control_pipeline_step(&control_pipeline);
+            }
 
             board_profile_low();
 
@@ -447,6 +587,36 @@ int main(void)
                            (long)encoder_count,
                            (unsigned int)vbus_raw,
                            (unsigned long)vbus_mv);
+
+                    if (control_cycle_due &&
+                        control_trace_capture.valid) {
+                        const control_trace_record_t *record =
+                            &control_trace_capture.latest;
+                        int32_t theta_mrad = (int32_t)(
+                            record->state.pendulum_angle_rad * 1000.0F);
+                        int32_t theta_rate_mrad_s = (int32_t)(
+                            record->state.pendulum_rate_rad_s * 1000.0F);
+                        int32_t phi_mrad = (int32_t)(
+                            record->state.arm_angle_rad * 1000.0F);
+                        int32_t phi_rate_mrad_s = (int32_t)(
+                            record->state.arm_rate_rad_s * 1000.0F);
+
+                        printf(
+                            "[CTRL] mode=%s allowed=%u faults=0x%08lx "
+                            "theta_mrad=%ld theta_rate_mrad_s=%ld "
+                            "phi_mrad=%ld phi_rate_mrad_s=%ld "
+                            "sample_age_us=%lu missed_cycles=%lu "
+                            "motor_sink=unbound\n",
+                            control_mode_name(record->control_mode),
+                            record->control_allowed ? 1U : 0U,
+                            (unsigned long)record->state_safety_flags,
+                            (long)theta_mrad,
+                            (long)theta_rate_mrad_s,
+                            (long)phi_mrad,
+                            (long)phi_rate_mrad_s,
+                            (unsigned long)record->sensor.sample_age_us,
+                            (unsigned long)control_missed_cycles);
+                    }
                 }
             } else {
                 telemetry_phase = 0U;

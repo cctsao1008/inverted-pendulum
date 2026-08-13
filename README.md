@@ -5,7 +5,7 @@ From-scratch embedded firmware and control software for a rotary inverted pendul
 The project currently targets the original **Forest S1 STM32F103C8T6 controller plus Forest D1 baseboard (2016 revision)** as the hardware baseline. Platform-independent control modules are developed and tested on the host before they are connected to real motor output.
 
 > [!CAUTION]
-> The balance controller is not yet connected to physical motor output. Normal maintenance tests require explicit arm and remain limited to `20%` and 10 seconds. The separate characterization command may ramp to `30%`; it automatically stops and disarms on completion, timeout, direction reversal, or implausible encoder speed. Lift and secure the mechanism, keep clear of the rotating arm, and use a current-limited motor supply.
+> The balance controller is not yet connected to physical motor output. Normal `motor test` maintenance commands require explicit arm and remain limited to `20%` and 10 seconds. Characterization may ramp to `30%`; dedicated response/brake characterization commands can use higher explicitly requested duties within their own bounds. These paths automatically stop/disarm on their defined completion or fault conditions. Lift and secure the mechanism, keep clear of the rotating arm, and use a current-limited motor supply.
 >
 > The firmware now configures the 2016 Forest D1 schematic input at **PA7 / ADC1_IN7**, but the sensor zero, range, direction, wiring, and physical signal are not yet verified. Do not use the ADC reading for control until that physical validation is complete.
 
@@ -27,19 +27,21 @@ The `main` branch contains these foundations:
 - Fail-closed safety state machine
 - Filtered four-state estimator
 - Four-state balance controller using `u = -Kx`
-- Five host-side unit-test suites
+- Platform-independent `control_pipeline` with fail-closed runtime capability validation
+- STM32 observe-only control runtime with wrap-safe continuous arm position and control trace
+- Host-side tests for control contracts, safety boundaries, runtime configuration, and application adapters
 
-The estimator, controller, and safety modules exist in `control/`, but `app/main.c` does not yet connect them to motor output. The motor interface is available only through the bounded UART maintenance command.
+`app/main.c` now feeds real STM32 sensor samples into `control_pipeline_step()` at the real 1 kHz cadence without replaying missed control cycles. The automatic-control motor sink remains intentionally unbound, so the bounded UART maintenance path is still the only code path that can write the physical motor.
 
 The communication architecture keeps text mode for maintenance and reserves Micro XRCE-DDS for a measured feasibility milestone. COBS is intentionally not implemented. See [Communication and Parameter Architecture](docs/architecture/communications.md).
 
 ### Next milestone
 
-**V0.6 — `control_pipeline`**
+**V0.7 — runtime observation and motor-authority preparation**
 
-Integrate acquisition, state estimation, safety decisions, and controller evaluation through a platform-independent pipeline while keeping physical motor output disabled until the interface and safety behavior are verified.
+Verify the live 1 kHz control trace, pendulum calibration, continuous arm coordinate, missed-cycle behavior, and sensor timing on hardware. Then define validated state/output safety limits and add an explicit maintenance/control motor-authority boundary before automatic control is connected to the physical motor sink.
 
-Before V0.6 is connected to hardware, the PA7 pendulum ADC mapping, sensor zero, range, direction, encoder direction, and motor-interface polarity must be verified.
+The PA7 pendulum ADC signal, sensor zero/range/direction, encoder direction, and motor-interface polarity still require physical verification before closed-loop control is enabled.
 
 ## Hardware baseline
 
