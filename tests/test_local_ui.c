@@ -10,7 +10,7 @@ int main(void)
     local_ui_frame_t frame;
 
     local_ui_init(&ui);
-    assert(local_ui_get_contrast(&ui) == 0x7FU);
+    assert(local_ui_get_contrast(&ui) == 0xEFU);
 
     snapshot.control_trace_valid = true;
     snapshot.control_runtime_ready = true;
@@ -39,8 +39,8 @@ int main(void)
     local_ui_render(&ui, &snapshot, &frame);
     assert(strstr(frame.lines[0], "STATUS") != NULL);
 
-    assert(local_ui_increase_contrast(&ui) > 0x7FU);
-    assert(local_ui_decrease_contrast(&ui) == 0x7FU);
+    assert(local_ui_increase_contrast(&ui) == 0xFFU);
+    assert(local_ui_decrease_contrast(&ui) == 0xEFU);
 
     return 0;
 }

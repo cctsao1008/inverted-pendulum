@@ -196,6 +196,10 @@ int main(void)
         NULL,
         local_ui_get_contrast(&local_ui));
 
+    if (oled_ready) {
+        board_oled_self_test();
+    }
+
     key_service_init(
         &key_service,
         (uint8_t)BOARD_KEY_COUNT,
@@ -281,8 +285,9 @@ int main(void)
            (unsigned int)parameters.telemetry_rate_hz);
     printf(
         "[OLED] SSD1306 128x64 soft-spi=%s clk=PB5 data=PB4 "
-        "reset=PB3 dc=PA15\n",
-        oled_ready ? "ready" : "error");
+        "reset=PB3 dc=PA15 self-test=%s\n",
+        oled_ready ? "configured" : "error",
+        oled_ready ? "full-on/off" : "skipped");
     printf(
         "[CONTROL] runtime=%s profile=observe-only motor_sink=unbound "
         "arm_home=boot-position\n",

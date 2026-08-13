@@ -75,7 +75,7 @@ void local_ui_init(local_ui_t *ui)
     }
 
     ui->page = LOCAL_UI_PAGE_STATUS;
-    ui->contrast = 0x7FU;
+    ui->contrast = 0xEFU;
 }
 
 void local_ui_next_page(local_ui_t *ui)

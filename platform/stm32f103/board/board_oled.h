@@ -6,6 +6,7 @@
 
 void board_oled_init(void);
 void board_oled_reset(void *context);
+void board_oled_self_test(void);
 void board_oled_write_command(
     uint8_t command,
     void *context);

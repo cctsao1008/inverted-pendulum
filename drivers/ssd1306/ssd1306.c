@@ -12,7 +12,7 @@
 #define SSD1306_CMD_CHARGE_PUMP          0x8DU
 #define SSD1306_CMD_MEMORY_MODE          0x20U
 #define SSD1306_CMD_SEGMENT_REMAP        0xA1U
-#define SSD1306_CMD_COM_SCAN_DEC         0xC8U
+#define SSD1306_CMD_COM_SCAN_NORMAL      0xC0U
 #define SSD1306_CMD_SET_COM_PINS         0xDAU
 #define SSD1306_CMD_SET_CONTRAST         0x81U
 #define SSD1306_CMD_SET_PRECHARGE        0xD9U
@@ -191,18 +191,18 @@ bool ssd1306_init(
     display->reset(display->context);
 
     display->write_command(SSD1306_CMD_DISPLAY_OFF, display->context);
-    write_command_pair(display, SSD1306_CMD_SET_CLOCK, 0x80U);
+    write_command_pair(display, SSD1306_CMD_SET_CLOCK, 0x50U);
     write_command_pair(display, SSD1306_CMD_SET_MULTIPLEX, 0x3FU);
     write_command_pair(display, SSD1306_CMD_SET_OFFSET, 0x00U);
     display->write_command(SSD1306_CMD_SET_START_LINE, display->context);
     write_command_pair(display, SSD1306_CMD_CHARGE_PUMP, 0x14U);
     write_command_pair(display, SSD1306_CMD_MEMORY_MODE, 0x02U);
     display->write_command(SSD1306_CMD_SEGMENT_REMAP, display->context);
-    display->write_command(SSD1306_CMD_COM_SCAN_DEC, display->context);
+    display->write_command(SSD1306_CMD_COM_SCAN_NORMAL, display->context);
     write_command_pair(display, SSD1306_CMD_SET_COM_PINS, 0x12U);
     write_command_pair(display, SSD1306_CMD_SET_CONTRAST, contrast);
     write_command_pair(display, SSD1306_CMD_SET_PRECHARGE, 0xF1U);
-    write_command_pair(display, SSD1306_CMD_SET_VCOM, 0x40U);
+    write_command_pair(display, SSD1306_CMD_SET_VCOM, 0x30U);
     display->write_command(SSD1306_CMD_RESUME_RAM, display->context);
     display->write_command(SSD1306_CMD_NORMAL_DISPLAY, display->context);
     display->write_command(SSD1306_CMD_DEACTIVATE_SCROLL, display->context);

@@ -75,12 +75,28 @@ void board_oled_reset(void *context)
 {
     (void)context;
 
-    gpio_set(OLED_RESET_PORT, OLED_RESET_PIN);
-    delay_milliseconds(1U);
+    /* Match the known-working Forest vendor firmware reset sequence. */
     gpio_clear(OLED_RESET_PORT, OLED_RESET_PIN);
-    delay_milliseconds(10U);
+    delay_milliseconds(100U);
     gpio_set(OLED_RESET_PORT, OLED_RESET_PIN);
     delay_milliseconds(10U);
+}
+
+void board_oled_self_test(void)
+{
+    /*
+     * SSD1306 has no readback on this board.  Exercise only controller
+     * command transport here: force every segment on, blank the panel, then
+     * return to RAM-driven display mode before the normal UI starts.
+     */
+    board_oled_write_command(0xA5U, NULL);
+    board_oled_write_command(0xAFU, NULL);
+    delay_milliseconds(500U);
+    board_oled_write_command(0xAEU, NULL);
+    delay_milliseconds(250U);
+    board_oled_write_command(0xAFU, NULL);
+    board_oled_write_command(0xA4U, NULL);
+    delay_milliseconds(250U);
 }
 
 void board_oled_write_command(
