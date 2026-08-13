@@ -33,4 +33,7 @@ void control_state_machine_step(
 control_mode_t control_state_machine_get_mode(
     const control_state_machine_t *machine);
 
+bool control_state_machine_mode_is_active(
+    control_mode_t mode);
+
 #endif

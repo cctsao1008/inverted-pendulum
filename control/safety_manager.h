@@ -6,6 +6,15 @@
 
 #include "control_config.h"
 
+/*
+ * Legacy migration source only.
+ *
+ * The authoritative runtime safety path is state_safety followed by
+ * control_state_machine. This module is retained temporarily because its
+ * capture/escape sequencing policy may be migrated into the new FSM. New
+ * production integration code must not adopt safety_manager as a second
+ * authority owner.
+ */
 typedef enum {
     SAFETY_STATE_DISABLED = 0,
     SAFETY_STATE_READY,

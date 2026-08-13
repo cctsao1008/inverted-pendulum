@@ -21,6 +21,20 @@ int main(void)
     state_safety_result_t safety;
 
     control_runtime_config_init_defaults(&runtime);
+
+    assert(!control_state_machine_mode_is_active(
+        CONTROL_MODE_DISABLED));
+    assert(!control_state_machine_mode_is_active(
+        CONTROL_MODE_IDLE));
+    assert(control_state_machine_mode_is_active(
+        CONTROL_MODE_SWING_UP));
+    assert(control_state_machine_mode_is_active(
+        CONTROL_MODE_CAPTURE));
+    assert(control_state_machine_mode_is_active(
+        CONTROL_MODE_BALANCE));
+    assert(!control_state_machine_mode_is_active(
+        CONTROL_MODE_FAULT));
+
     control_state_machine_init(&machine);
     assert(control_state_machine_get_mode(&machine) ==
         CONTROL_MODE_DISABLED);

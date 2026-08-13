@@ -332,3 +332,23 @@ add_test(
     NAME estimator_contracts
     COMMAND test_estimator_contracts
 )
+
+add_executable(test_control_runtime
+    test_control_runtime.c
+)
+
+target_link_libraries(test_control_runtime PRIVATE
+    control_core
+)
+
+target_compile_options(test_control_runtime PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME control_runtime
+    COMMAND test_control_runtime
+)

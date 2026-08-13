@@ -24,24 +24,28 @@ uint32_t control_runtime_config_validate(
         return CONTROL_RUNTIME_CONFIG_ERROR_ARGUMENT;
     }
 
-    switch (config->estimator_mode) {
-    case STATE_ESTIMATOR_BASIC:
-    case STATE_ESTIMATOR_KALMAN:
-        break;
-
-    default:
+    /*
+     * BASIC is the only estimator with a completed feedback-path
+     * implementation. KALMAN remains a safe architecture stub.
+     */
+    if (config->estimator_mode != STATE_ESTIMATOR_BASIC) {
         errors |= CONTROL_RUNTIME_CONFIG_ERROR_ESTIMATOR;
-        break;
     }
 
-    switch (config->balance_controller) {
-    case BALANCE_CONTROLLER_LQR:
-    case BALANCE_CONTROLLER_LQI:
-        break;
-
-    default:
+    /*
+     * LQR is the only completed balance controller. LQI remains a safe stub
+     * until its feedback law and lifecycle contract are implemented.
+     */
+    if (config->balance_controller != BALANCE_CONTROLLER_LQR) {
         errors |= CONTROL_RUNTIME_CONFIG_ERROR_BALANCE;
-        break;
+    }
+
+    if (config->swing_up_enabled) {
+        errors |= CONTROL_RUNTIME_CONFIG_ERROR_SWING_UP;
+    }
+
+    if (config->capture_enabled) {
+        errors |= CONTROL_RUNTIME_CONFIG_ERROR_CAPTURE;
     }
 
     return errors;

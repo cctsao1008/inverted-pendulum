@@ -3,13 +3,6 @@
 #include "actuator_mapper.h"
 #include "controller_dispatch.h"
 
-static bool mode_is_active(control_mode_t mode)
-{
-    return (mode == CONTROL_MODE_SWING_UP) ||
-           (mode == CONTROL_MODE_CAPTURE) ||
-           (mode == CONTROL_MODE_BALANCE);
-}
-
 void control_pipeline_init(
     control_pipeline_t *pipeline)
 {
@@ -293,7 +286,7 @@ void control_pipeline_step(
     /* 8. Motor Output */
     motor_authority =
         pipeline->runtime_config.motor_output_enabled &&
-        mode_is_active(mode) &&
+        control_state_machine_mode_is_active(mode) &&
         state_safety.control_allowed;
 
     if (motor_authority) {

@@ -16,13 +16,6 @@ static bool mode_is_valid(control_mode_t mode)
     }
 }
 
-static bool mode_is_active(control_mode_t mode)
-{
-    return (mode == CONTROL_MODE_SWING_UP) ||
-           (mode == CONTROL_MODE_CAPTURE) ||
-           (mode == CONTROL_MODE_BALANCE);
-}
-
 static bool mode_is_enabled(
     control_mode_t mode,
     const control_runtime_config_t *runtime)
@@ -150,7 +143,8 @@ void control_state_machine_step(
 
     if (safety->control_allowed) {
         machine->mode = requested;
-    } else if (mode_is_active(machine->mode)) {
+    } else if (control_state_machine_mode_is_active(
+                   machine->mode)) {
         /*
          * A non-hard loss of readiness drops an active controller to IDLE.
          * Hard failures are handled above and enter FAULT.
@@ -170,4 +164,12 @@ control_mode_t control_state_machine_get_mode(
     }
 
     return machine->mode;
+}
+
+bool control_state_machine_mode_is_active(
+    control_mode_t mode)
+{
+    return (mode == CONTROL_MODE_SWING_UP) ||
+           (mode == CONTROL_MODE_CAPTURE) ||
+           (mode == CONTROL_MODE_BALANCE);
 }
