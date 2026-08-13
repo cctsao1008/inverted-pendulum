@@ -23,18 +23,22 @@ add_executable(${TARGET_NAME}
     ${PROJECT_SOURCE_DIR}/app/command_service.c
     ${PROJECT_SOURCE_DIR}/app/control_profile.c
     ${PROJECT_SOURCE_DIR}/app/control_sensor_adapter.c
+    ${PROJECT_SOURCE_DIR}/app/key_service.c
+    ${PROJECT_SOURCE_DIR}/app/local_ui.c
     ${PROJECT_SOURCE_DIR}/app/main.c
     ${PROJECT_SOURCE_DIR}/app/motion_observer.c
     ${PROJECT_SOURCE_DIR}/app/motor_test_service.c
     ${PROJECT_SOURCE_DIR}/app/pendulum_angle.c
     ${PROJECT_SOURCE_DIR}/app/runtime_parameters.c
     ${PROJECT_SOURCE_DIR}/app/telemetry_toggle.c
+    ${PROJECT_SOURCE_DIR}/drivers/ssd1306/ssd1306.c
     ${PLATFORM_DIR}/board/board_adc.c
     ${PLATFORM_DIR}/board/board_button.c
     ${PLATFORM_DIR}/board/board_clock.c
     ${PLATFORM_DIR}/board/board_encoder.c
     ${PLATFORM_DIR}/board/board_led.c
     ${PLATFORM_DIR}/board/board_motor.c
+    ${PLATFORM_DIR}/board/board_oled.c
     ${PLATFORM_DIR}/board/board_profile.c
     ${PLATFORM_DIR}/board/board_time.c
     ${PLATFORM_DIR}/board/board_uart.c
@@ -47,6 +51,7 @@ add_dependencies(
 
 target_include_directories(${TARGET_NAME} PRIVATE
     ${PROJECT_SOURCE_DIR}/app
+    ${PROJECT_SOURCE_DIR}/drivers/ssd1306
     ${PLATFORM_DIR}/board
     ${LIBOPENCM3_DIR}/include
 )

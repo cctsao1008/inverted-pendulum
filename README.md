@@ -17,7 +17,9 @@ The `main` branch contains these foundations:
 - 1 kHz firmware timing baseline
 - Sensor-acquisition framework with the pendulum ADC mapped to PA7 / ADC1_IN7
 - Arm quadrature-encoder acquisition
-- M-button-controlled UART telemetry at 115200 baud and 10 Hz when enabled
+- Five-key local input service for M/X/+/-/USER with debounce, long-press, and repeat events
+- SSD1306 128x64 local status UI using bounded software-SPI updates
+- USER-key-controlled UART telemetry at 115200 baud and 10 Hz when enabled
 - Text UART command interface and RAM-only runtime parameter registry
 - Wrap-safe pendulum ADC conversion to `[-pi, pi)`
 - Bounded Motor B maintenance test on PB1/PB12/PB13
@@ -55,7 +57,9 @@ The PA7 pendulum ADC signal, sensor zero/range/direction, encoder direction, and
 | Battery voltage input | PA6 / ADC1_IN6 through a 10 kΩ / 1 kΩ divider |
 | Arm encoder | TIM2 quadrature input on PA0/PA1 (A0/A1 connector signals) |
 | Maintenance interface | USART1 on PA9/PA10, 115200 baud; text commands and telemetry |
-| Telemetry control | PA3 M button or `telem on/off`; default off; runtime rate 1–20 Hz |
+| Local keys | PA3 M, PA2 X, PA11 +, PA12 -, PA5 USER; active-low |
+| Telemetry control | PA5 USER button or `telem on/off`; default off; runtime rate 1–20 Hz |
+| OLED | SSD1306 128x64 software SPI: PB5 CLK, PB4 DATA, PB3 RESET, PA15 D/C; SWD retained |
 | Motor B control | PB1 / TIM3_CH4 PWM, PB13 / BIN1, PB12 / BIN2 |
 | Motor output | Maintenance test only: 20 kHz PWM, `±20%` maximum, 10 s maximum |
 
@@ -193,6 +197,7 @@ The STM32F103C8T6 board remains the immediate baseline because it plugs directly
 app/                    STM32 firmware application
 cmake/                  Cross-compilation toolchain
 control/                Platform-independent estimator, safety, and control logic
+drivers/ssd1306/        Platform-independent SSD1306 text display driver
 docs/hardware/          Schematic-derived hardware baselines and validation notes
 platform/stm32f103/     STM32F103 board support and linker configuration
 tests/                  Host-side unit tests

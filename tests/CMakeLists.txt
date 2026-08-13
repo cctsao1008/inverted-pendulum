@@ -404,3 +404,67 @@ add_test(
     NAME control_profile
     COMMAND test_control_profile
 )
+
+add_executable(test_key_service
+    test_key_service.c
+    ${PROJECT_SOURCE_DIR}/app/key_service.c
+)
+
+target_include_directories(test_key_service PRIVATE
+    ${PROJECT_SOURCE_DIR}/app
+)
+
+target_compile_options(test_key_service PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME key_service
+    COMMAND test_key_service
+)
+
+add_executable(test_local_ui
+    test_local_ui.c
+    ${PROJECT_SOURCE_DIR}/app/local_ui.c
+)
+
+target_include_directories(test_local_ui PRIVATE
+    ${PROJECT_SOURCE_DIR}/app
+    ${PROJECT_SOURCE_DIR}/control
+)
+
+target_compile_options(test_local_ui PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME local_ui
+    COMMAND test_local_ui
+)
+
+add_executable(test_ssd1306
+    test_ssd1306.c
+    ${PROJECT_SOURCE_DIR}/drivers/ssd1306/ssd1306.c
+)
+
+target_include_directories(test_ssd1306 PRIVATE
+    ${PROJECT_SOURCE_DIR}/drivers/ssd1306
+)
+
+target_compile_options(test_ssd1306 PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME ssd1306
+    COMMAND test_ssd1306
+)

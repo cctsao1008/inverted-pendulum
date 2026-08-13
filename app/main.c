@@ -9,6 +9,7 @@
 #include "board_encoder.h"
 #include "board_led.h"
 #include "board_motor.h"
+#include "board_oled.h"
 #include "board_profile.h"
 #include "board_time.h"
 #include "board_uart.h"
@@ -16,14 +17,18 @@
 #include "control_pipeline.h"
 #include "control_profile.h"
 #include "control_sensor_adapter.h"
+#include "key_service.h"
+#include "local_ui.h"
 #include "motor_test_service.h"
 #include "pendulum_angle.h"
 #include "runtime_parameters.h"
+#include "ssd1306.h"
 #include "telemetry_toggle.h"
 
-#define CONTROL_FREQUENCY_HZ   1000U
-#define BUTTON_DEBOUNCE_TICKS  50U
-#define LED_TOGGLE_TICKS       500U
+#define CONTROL_FREQUENCY_HZ          1000U
+#define LED_TOGGLE_TICKS               500U
+#define OLED_UI_REFRESH_TICKS          100U
+#define OLED_FLUSH_BYTES_PER_TICK       32U
 
 typedef struct {
     bool valid;
@@ -149,8 +154,10 @@ int main(void)
     uint32_t last_tick;
     uint32_t telemetry_phase = 0U;
     uint32_t led_divider = 0U;
+    uint32_t ui_divider = 0U;
     uint32_t control_missed_cycles = 0U;
     bool control_runtime_ready;
+    bool oled_ready;
     uint16_t last_control_upright_adc;
     int8_t last_control_pendulum_direction;
     int8_t last_characterize_percent = 0;
@@ -160,10 +167,14 @@ int main(void)
     runtime_parameters_t parameters;
     motor_test_service_t motor_test;
     command_service_t command_service;
+    key_service_t key_service;
+    local_ui_t local_ui;
     control_pipeline_t control_pipeline;
     control_sensor_adapter_t control_sensor_adapter;
     app_control_profile_t control_profile;
     control_trace_capture_t control_trace_capture = {0};
+    static ssd1306_t oled;
+    static local_ui_frame_t local_ui_frame;
 
     board_clock_init();
     board_led_init();
@@ -175,9 +186,24 @@ int main(void)
     board_profile_init();
     board_time_init();
 
+    local_ui_init(&local_ui);
+    board_oled_init();
+    oled_ready = ssd1306_init(
+        &oled,
+        board_oled_reset,
+        board_oled_write_command,
+        board_oled_write_data,
+        NULL,
+        local_ui_get_contrast(&local_ui));
+
+    key_service_init(
+        &key_service,
+        (uint8_t)BOARD_KEY_COUNT,
+        board_keys_pressed_mask(),
+        board_time_ticks());
     telemetry_toggle_init(
         &telemetry_toggle,
-        board_button_is_m_pressed(),
+        false,
         board_time_ticks());
     runtime_parameters_init_defaults(&parameters);
     last_control_upright_adc = parameters.pendulum_upright_adc;
@@ -250,8 +276,13 @@ int main(void)
     printf("[ANGLE] upright_adc=%u direction=%d wrap=[-pi,+pi)\n",
            (unsigned int)parameters.pendulum_upright_adc,
            (int)parameters.pendulum_direction);
-    printf("[TELEM] M button PA3 toggles output; default=off rate=%u Hz\n",
+    printf("[KEY] M=PA3 X=PA2 +=PA11 -=PA12 USER=PA5 active-low\n");
+    printf("[TELEM] USER button toggles output; default=off rate=%u Hz\n",
            (unsigned int)parameters.telemetry_rate_hz);
+    printf(
+        "[OLED] SSD1306 128x64 soft-spi=%s clk=PB5 data=PB4 "
+        "reset=PB3 dc=PA15\n",
+        oled_ready ? "ready" : "error");
     printf(
         "[CONTROL] runtime=%s profile=observe-only motor_sink=unbound "
         "arm_home=boot-position\n",
@@ -298,7 +329,6 @@ int main(void)
             int32_t encoder_count;
             float pendulum_angle_rad;
             bool control_cycle_due;
-            bool telemetry_changed;
             bool motor_test_completed;
 
             last_tick++;
@@ -548,19 +578,47 @@ int main(void)
 
             command_service_update_1ms(&command_service);
 
-            telemetry_changed = telemetry_toggle_update(
-                &telemetry_toggle,
-                board_button_is_m_pressed(),
-                last_tick,
-                BUTTON_DEBOUNCE_TICKS);
+            if (control_cycle_due) {
+                key_service_events_t key_events =
+                    key_service_update(
+                        &key_service,
+                        board_keys_pressed_mask(),
+                        last_tick);
 
-            if (telemetry_changed) {
-                telemetry_phase = 0U;
-                printf("[TELEM] %s rate=%u Hz source=button\n",
-                       telemetry_toggle_is_enabled(&telemetry_toggle)
-                           ? "enabled"
-                           : "disabled",
-                       (unsigned int)parameters.telemetry_rate_hz);
+                if ((key_events.pressed &
+                     BOARD_KEY_MASK(BOARD_KEY_M)) != 0U) {
+                    local_ui_next_page(&local_ui);
+                }
+                if ((key_events.pressed &
+                     BOARD_KEY_MASK(BOARD_KEY_X)) != 0U) {
+                    local_ui_previous_page(&local_ui);
+                }
+                if (((key_events.pressed | key_events.repeat) &
+                     BOARD_KEY_MASK(BOARD_KEY_PLUS)) != 0U) {
+                    uint8_t contrast =
+                        local_ui_increase_contrast(&local_ui);
+                    if (oled_ready) {
+                        ssd1306_set_contrast(&oled, contrast);
+                    }
+                }
+                if (((key_events.pressed | key_events.repeat) &
+                     BOARD_KEY_MASK(BOARD_KEY_MINUS)) != 0U) {
+                    uint8_t contrast =
+                        local_ui_decrease_contrast(&local_ui);
+                    if (oled_ready) {
+                        ssd1306_set_contrast(&oled, contrast);
+                    }
+                }
+                if ((key_events.pressed &
+                     BOARD_KEY_MASK(BOARD_KEY_USER)) != 0U) {
+                    (void)telemetry_toggle_toggle(&telemetry_toggle);
+                    telemetry_phase = 0U;
+                    printf("[TELEM] %s rate=%u Hz source=user-key\n",
+                           telemetry_toggle_is_enabled(&telemetry_toggle)
+                               ? "enabled"
+                               : "disabled",
+                           (unsigned int)parameters.telemetry_rate_hz);
+                }
             }
 
             led_divider++;
@@ -620,6 +678,87 @@ int main(void)
                 }
             } else {
                 telemetry_phase = 0U;
+            }
+
+            if (control_cycle_due && oled_ready) {
+                ui_divider++;
+
+                if ((ui_divider >= OLED_UI_REFRESH_TICKS) &&
+                    ssd1306_is_idle(&oled)) {
+                    local_ui_snapshot_t snapshot = {0};
+                    uint8_t row;
+
+                    snapshot.control_trace_valid =
+                        control_trace_capture.valid;
+                    snapshot.control_runtime_ready =
+                        control_runtime_ready;
+                    snapshot.telemetry_enabled =
+                        telemetry_toggle_is_enabled(&telemetry_toggle);
+                    snapshot.missed_cycles = control_missed_cycles;
+                    snapshot.vbus_millivolts =
+                        board_adc_read_vbus_millivolts();
+                    snapshot.encoder_count = encoder_count;
+                    snapshot.maintenance_output_percent =
+                        motor_test_service_percent(&motor_test);
+                    snapshot.motor_channel_d1 =
+                        board_motor_get_channel() ==
+                        BOARD_MOTOR_CHANNEL_D1;
+                    snapshot.oled_contrast =
+                        local_ui_get_contrast(&local_ui);
+                    snapshot.control_mode =
+                        control_pipeline_get_mode(&control_pipeline);
+                    snapshot.estimator_mode =
+                        control_profile.runtime.estimator_mode;
+                    snapshot.balance_controller =
+                        control_profile.runtime.balance_controller;
+
+                    if (control_trace_capture.valid) {
+                        const control_trace_record_t *record =
+                            &control_trace_capture.latest;
+
+                        snapshot.control_allowed =
+                            record->control_allowed;
+                        snapshot.control_mode =
+                            record->control_mode;
+                        snapshot.estimator_mode =
+                            record->estimator_mode;
+                        snapshot.balance_controller =
+                            record->balance_controller;
+                        snapshot.fault_flags =
+                            record->state_safety_flags;
+                        snapshot.sample_age_us =
+                            record->sensor.sample_age_us;
+                        snapshot.theta_mrad = (int32_t)(
+                            record->state.pendulum_angle_rad * 1000.0F);
+                        snapshot.theta_rate_mrad_s = (int32_t)(
+                            record->state.pendulum_rate_rad_s * 1000.0F);
+                        snapshot.phi_mrad = (int32_t)(
+                            record->state.arm_angle_rad * 1000.0F);
+                        snapshot.phi_rate_mrad_s = (int32_t)(
+                            record->state.arm_rate_rad_s * 1000.0F);
+                        snapshot.control_milli = (int32_t)(
+                            record->control.u * 1000.0F);
+                        snapshot.actuator_tenths_percent = (int32_t)(
+                            record->actuator.pwm_percent * 10.0F);
+                    }
+
+                    local_ui_render(
+                        &local_ui,
+                        &snapshot,
+                        &local_ui_frame);
+                    for (row = 0U; row < LOCAL_UI_ROWS; row++) {
+                        ssd1306_write_line(
+                            &oled,
+                            row,
+                            local_ui_frame.lines[row]);
+                    }
+                    ui_divider = 0U;
+                }
+
+                /* Bound OLED traffic so UI work cannot become a full-frame burst. */
+                ssd1306_service(
+                    &oled,
+                    OLED_FLUSH_BYTES_PER_TICK);
             }
 
             if (led_divider >= LED_TOGGLE_TICKS) {

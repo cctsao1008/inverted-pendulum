@@ -37,13 +37,17 @@ A schematic establishes intended connectivity, but it does not establish sensor 
 | USART1 TX | PA9 | Connected through the controller-board USB-UART path |
 | USART1 RX | PA10 | Connected through the controller-board USB-UART path |
 | Blue user LED | PA4 | Active-low |
-| Forest S1 USER key | PA5 | Active-low |
-| Forest D1 M key | **PA3** | Active-low; toggles 10 Hz sensor telemetry, which defaults off |
-| Forest D1 X key | PA2 | Active-low |
-| Forest D1 + key | PA11 | Active-low |
-| Forest D1 - key | PA12 | Active-low |
-| SWDIO | PA13 | Keep available for debug |
-| SWCLK | PA14 | Keep available for debug |
+| Forest S1 USER key | PA5 | Active-low; toggles UART telemetry in the local UI baseline |
+| Forest D1 M key | **PA3** | Active-low; next local UI page |
+| Forest D1 X key | PA2 | Active-low; previous/back local UI page |
+| Forest D1 + key | PA11 | Active-low; local UI increase/repeat input |
+| Forest D1 - key | PA12 | Active-low; local UI decrease/repeat input |
+| OLED clock | PB5 | 0.96-inch 6-pin SSD1306 module serial clock |
+| OLED data | PB4 | SSD1306 serial data; JTAG function reclaimed |
+| OLED reset | PB3 | SSD1306 reset; JTAG function reclaimed |
+| OLED D/C | PA15 | SSD1306 data/command; JTAG function reclaimed |
+| SWDIO | PA13 | Kept available for debug |
+| SWCLK | PA14 | Kept available for debug |
 
 ## Clock and USB-UART boundary
 
@@ -150,6 +154,8 @@ The firmware now matches the 2016 Forest D1 schematic mapping:
 | `app/main.c` | boot text reports `PA7 ADC1_IN7` |
 
 This source-level correction does not complete physical validation. PA3 remains the Forest D1 M-button input, and the PA7 telemetry must not be treated as a calibrated pendulum-angle signal until its wiring, zero, range, direction, and electrical limits are measured on the assembled unit.
+
+The 0.96-inch OLED module information supplied with this project identifies the 6-pin display as an SSD1306 128x64 serial module. The controller-board connector maps PB5/PB4/PB3/PA15 to clock/data/reset/D-C. Firmware disables the JTAG-DP function on PA15/PB3/PB4 while retaining SWD on PA13/PA14. Treat the exact populated OLED revision as pending physical confirmation until the display is exercised on the assembled unit.
 
 V0.6 control-pipeline work must not be connected to motor output until the PA7 signal is physically verified.
 
