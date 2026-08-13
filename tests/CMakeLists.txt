@@ -230,3 +230,105 @@ add_test(
     NAME control_pipeline
     COMMAND test_control_pipeline
 )
+
+add_executable(test_control_state_machine
+    test_control_state_machine.c
+)
+
+target_link_libraries(test_control_state_machine PRIVATE
+    control_core
+)
+
+target_compile_options(test_control_state_machine PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME control_state_machine
+    COMMAND test_control_state_machine
+)
+
+add_executable(test_output_safety
+    test_output_safety.c
+)
+
+target_link_libraries(test_output_safety PRIVATE
+    control_core
+)
+
+target_compile_options(test_output_safety PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME output_safety
+    COMMAND test_output_safety
+)
+
+add_executable(test_actuator_mapper
+    test_actuator_mapper.c
+)
+
+target_link_libraries(test_actuator_mapper PRIVATE
+    control_core
+    m
+)
+
+target_compile_options(test_actuator_mapper PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME actuator_mapper
+    COMMAND test_actuator_mapper
+)
+
+add_executable(test_state_safety
+    test_state_safety.c
+)
+
+target_link_libraries(test_state_safety PRIVATE
+    control_core
+)
+
+target_compile_options(test_state_safety PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME state_safety
+    COMMAND test_state_safety
+)
+
+add_executable(test_estimator_contracts
+    test_estimator_contracts.c
+)
+
+target_link_libraries(test_estimator_contracts PRIVATE
+    control_core
+    m
+)
+
+target_compile_options(test_estimator_contracts PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME estimator_contracts
+    COMMAND test_estimator_contracts
+)

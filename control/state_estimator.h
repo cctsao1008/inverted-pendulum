@@ -8,7 +8,10 @@
 #include "control_types.h"
 
 typedef struct {
+    /* Wrapped circular pendulum angle in [-pi, pi]. */
     float pendulum_angle_rad;
+
+    /* Continuous arm position relative to the defined reference. */
     float arm_angle_rad;
     uint32_t timestamp_us;
 } state_estimator_input_t;

@@ -1,8 +1,8 @@
 #include "balance_controller.h"
+#include "control_math.h"
 
 #include <float.h>
 #include <stddef.h>
-#include <stdint.h>
 
 static bool controller_value_is_finite(float value)
 {
@@ -30,10 +30,8 @@ balance_controller_result_t balance_controller_compute(
     float *normalized_output)
 {
     float state_vector[4];
-    float feedback = 0.0F;
-    float term;
+    float feedback;
     float command;
-    uint32_t index;
 
     if (normalized_output == NULL) {
         return BALANCE_CONTROLLER_ERROR_ARGUMENT;
@@ -48,7 +46,7 @@ balance_controller_result_t balance_controller_compute(
         return BALANCE_CONTROLLER_ERROR_ARGUMENT;
     }
 
-    if (control_config_validate(config) !=
+    if (control_config_validate_balance(config) !=
         CONTROL_CONFIG_OK) {
         return BALANCE_CONTROLLER_ERROR_CONFIG;
     }
@@ -62,20 +60,13 @@ balance_controller_result_t balance_controller_compute(
     state_vector[2] = state->arm_angle_rad;
     state_vector[3] = state->arm_rate_rad_s;
 
-    for (index = 0U; index < 4U; index++) {
-        term =
-            config->balance_gain[index] *
-            state_vector[index];
+    feedback = control_math_dot_f32(
+        config->balance_gain,
+        state_vector,
+        4U);
 
-        if (!controller_value_is_finite(term)) {
-            return BALANCE_CONTROLLER_ERROR_NUMERIC;
-        }
-
-        feedback += term;
-
-        if (!controller_value_is_finite(feedback)) {
-            return BALANCE_CONTROLLER_ERROR_NUMERIC;
-        }
+    if (!controller_value_is_finite(feedback)) {
+        return BALANCE_CONTROLLER_ERROR_NUMERIC;
     }
 
     command = -feedback;

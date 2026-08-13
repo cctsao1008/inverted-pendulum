@@ -19,7 +19,7 @@ static bool estimator_value_is_finite(float value)
            (value >= -FLT_MAX);
 }
 
-static bool estimator_angle_is_valid(float angle_rad)
+static bool estimator_pendulum_angle_is_valid(float angle_rad)
 {
     return estimator_value_is_finite(angle_rad) &&
            (angle_rad >= -STATE_ESTIMATOR_PI_F) &&
@@ -109,14 +109,14 @@ state_estimator_result_t state_estimator_step(
         return STATE_ESTIMATOR_ERROR_ARGUMENT;
     }
 
-    if (control_config_validate(config) !=
+    if (control_config_validate_estimator(config) !=
         CONTROL_CONFIG_OK) {
         return STATE_ESTIMATOR_ERROR_CONFIG;
     }
 
-    if (!estimator_angle_is_valid(
+    if (!estimator_pendulum_angle_is_valid(
             input->pendulum_angle_rad) ||
-        !estimator_angle_is_valid(
+        !estimator_value_is_finite(
             input->arm_angle_rad)) {
         return STATE_ESTIMATOR_ERROR_SAMPLE;
     }
@@ -176,21 +176,26 @@ state_estimator_result_t state_estimator_step(
         input->pendulum_angle_rad,
         estimator->previous_pendulum_angle_rad);
 
-    arm_delta_rad = estimator_wrapped_delta(
-        input->arm_angle_rad,
-        estimator->previous_arm_angle_rad);
+    /*
+     * Pendulum angle is circular; arm position is continuous relative
+     * to the configured home/reference and must not wrap at +/-pi.
+     */
+    arm_delta_rad =
+        input->arm_angle_rad -
+        estimator->previous_arm_angle_rad;
 
     /*
-     * The configured fixed control period is used for the
-     * derivative. Timestamp delta is only a validity check.
+     * The configured period defines the admissible timing window.
+     * Derivatives use measured elapsed time so accepted jitter does not
+     * bias the estimated angular rates.
      */
     raw_pendulum_rate_rad_s =
         pendulum_delta_rad /
-        config->sample_period_s;
+        elapsed_s;
 
     raw_arm_rate_rad_s =
         arm_delta_rad /
-        config->sample_period_s;
+        elapsed_s;
 
     if (!estimator_value_is_finite(
             raw_pendulum_rate_rad_s) ||

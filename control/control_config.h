@@ -37,6 +37,19 @@ typedef enum {
 
 void control_config_init_invalid(control_config_t *config);
 
+/*
+ * Module-scoped validators prevent estimator, safety, and controller
+ * implementations from depending on unrelated configuration fields.
+ */
+uint32_t control_config_validate_estimator(
+    const control_config_t *config);
+
+uint32_t control_config_validate_safety(
+    const control_config_t *config);
+
+uint32_t control_config_validate_balance(
+    const control_config_t *config);
+
 uint32_t control_config_validate(
     const control_config_t *config);
 
