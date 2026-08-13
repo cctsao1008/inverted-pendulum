@@ -448,16 +448,16 @@ add_test(
     COMMAND test_local_ui
 )
 
-add_executable(test_ssd1306
-    test_ssd1306.c
-    ${PROJECT_SOURCE_DIR}/drivers/ssd1306/ssd1306.c
+add_executable(test_ssd1315
+    test_ssd1315.c
+    ${PROJECT_SOURCE_DIR}/drivers/ssd1315/ssd1315.c
 )
 
-target_include_directories(test_ssd1306 PRIVATE
-    ${PROJECT_SOURCE_DIR}/drivers/ssd1306
+target_include_directories(test_ssd1315 PRIVATE
+    ${PROJECT_SOURCE_DIR}/drivers/ssd1315
 )
 
-target_compile_options(test_ssd1306 PRIVATE
+target_compile_options(test_ssd1315 PRIVATE
     -Wall
     -Wextra
     -Wshadow
@@ -465,6 +465,6 @@ target_compile_options(test_ssd1306 PRIVATE
 )
 
 add_test(
-    NAME ssd1306
-    COMMAND test_ssd1306
+    NAME ssd1315
+    COMMAND test_ssd1315
 )

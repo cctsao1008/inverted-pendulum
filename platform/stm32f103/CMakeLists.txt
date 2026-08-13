@@ -31,7 +31,7 @@ add_executable(${TARGET_NAME}
     ${PROJECT_SOURCE_DIR}/app/pendulum_angle.c
     ${PROJECT_SOURCE_DIR}/app/runtime_parameters.c
     ${PROJECT_SOURCE_DIR}/app/telemetry_toggle.c
-    ${PROJECT_SOURCE_DIR}/drivers/ssd1306/ssd1306.c
+    ${PROJECT_SOURCE_DIR}/drivers/ssd1315/ssd1315.c
     ${PLATFORM_DIR}/board/board_adc.c
     ${PLATFORM_DIR}/board/board_button.c
     ${PLATFORM_DIR}/board/board_clock.c
@@ -51,7 +51,7 @@ add_dependencies(
 
 target_include_directories(${TARGET_NAME} PRIVATE
     ${PROJECT_SOURCE_DIR}/app
-    ${PROJECT_SOURCE_DIR}/drivers/ssd1306
+    ${PROJECT_SOURCE_DIR}/drivers/ssd1315
     ${PLATFORM_DIR}/board
     ${LIBOPENCM3_DIR}/include
 )

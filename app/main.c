@@ -22,7 +22,7 @@
 #include "motor_test_service.h"
 #include "pendulum_angle.h"
 #include "runtime_parameters.h"
-#include "ssd1306.h"
+#include "ssd1315.h"
 #include "telemetry_toggle.h"
 
 #define CONTROL_FREQUENCY_HZ          1000U
@@ -173,7 +173,7 @@ int main(void)
     control_sensor_adapter_t control_sensor_adapter;
     app_control_profile_t control_profile;
     control_trace_capture_t control_trace_capture = {0};
-    static ssd1306_t oled;
+    static ssd1315_t oled;
     static local_ui_frame_t local_ui_frame;
 
     board_clock_init();
@@ -188,7 +188,7 @@ int main(void)
 
     local_ui_init(&local_ui);
     board_oled_init();
-    oled_ready = ssd1306_init(
+    oled_ready = ssd1315_init(
         &oled,
         board_oled_reset,
         board_oled_write_command,
@@ -284,7 +284,7 @@ int main(void)
     printf("[TELEM] USER button toggles output; default=off rate=%u Hz\n",
            (unsigned int)parameters.telemetry_rate_hz);
     printf(
-        "[OLED] SSD1306 128x64 soft-spi=%s clk=PB5 data=PB4 "
+        "[OLED] SSD1315 128x64 soft-spi=%s clk=PB5 data=PB4 "
         "reset=PB3 dc=PA15 self-test=%s\n",
         oled_ready ? "configured" : "error",
         oled_ready ? "full-on/off" : "skipped");
@@ -603,7 +603,7 @@ int main(void)
                     uint8_t contrast =
                         local_ui_increase_contrast(&local_ui);
                     if (oled_ready) {
-                        ssd1306_set_contrast(&oled, contrast);
+                        ssd1315_set_contrast(&oled, contrast);
                     }
                 }
                 if (((key_events.pressed | key_events.repeat) &
@@ -611,7 +611,7 @@ int main(void)
                     uint8_t contrast =
                         local_ui_decrease_contrast(&local_ui);
                     if (oled_ready) {
-                        ssd1306_set_contrast(&oled, contrast);
+                        ssd1315_set_contrast(&oled, contrast);
                     }
                 }
                 if ((key_events.pressed &
@@ -689,7 +689,7 @@ int main(void)
                 ui_divider++;
 
                 if ((ui_divider >= OLED_UI_REFRESH_TICKS) &&
-                    ssd1306_is_idle(&oled)) {
+                    ssd1315_is_idle(&oled)) {
                     local_ui_snapshot_t snapshot = {0};
                     uint8_t row;
 
@@ -752,7 +752,7 @@ int main(void)
                         &snapshot,
                         &local_ui_frame);
                     for (row = 0U; row < LOCAL_UI_ROWS; row++) {
-                        ssd1306_write_line(
+                        ssd1315_write_line(
                             &oled,
                             row,
                             local_ui_frame.lines[row]);
@@ -761,7 +761,7 @@ int main(void)
                 }
 
                 /* Bound OLED traffic so UI work cannot become a full-frame burst. */
-                ssd1306_service(
+                ssd1315_service(
                     &oled,
                     OLED_FLUSH_BYTES_PER_TICK);
             }

@@ -85,7 +85,7 @@ void board_oled_reset(void *context)
 void board_oled_self_test(void)
 {
     /*
-     * SSD1306 has no readback on this board.  Exercise only controller
+     * SSD1315 has no readback on this board.  Exercise only controller
      * command transport here: force every segment on, blank the panel, then
      * return to RAM-driven display mode before the normal UI starts.
      */
