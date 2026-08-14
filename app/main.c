@@ -499,8 +499,10 @@ int main(void)
         &control_profile,
         1.0F / (float)CONTROL_FREQUENCY_HZ);
 
-    closed_loop_gate_config_init_unconfigured(
-        &closed_loop_gate_config);
+    closed_loop_gate_config.max_sample_age_us =
+        parameters.control_gate_max_sample_age_us;
+    closed_loop_gate_config.max_abs_entry_theta_mrad =
+        parameters.control_gate_max_entry_theta_mrad;
 
     control_sensor_adapter_init(
         &control_sensor_adapter,
@@ -603,7 +605,10 @@ int main(void)
         control_runtime_ready ? "ready" : "config-error");
     printf(
         "[CONTROL_GATE] mode=observe-only operator=disabled "
-        "config=unconfigured allowed=0 motor_sink=unbound\n");
+        "config=ready sample_age_us<=%lu entry_theta_mrad<=%ld "
+        "allowed=0 motor_sink=unbound\n",
+        (unsigned long)closed_loop_gate_config.max_sample_age_us,
+        (long)closed_loop_gate_config.max_abs_entry_theta_mrad);
     printf(
         "[MOTOR_AUTH] owner=%s maintenance=arbiter control=unbound "
         "gate=disabled watchdog=%lums fault=latching\n",
@@ -713,7 +718,7 @@ int main(void)
                     const control_trace_record_t *record =
                         &control_trace_capture.latest;
                     closed_loop_gate_input_t gate_input = {
-                        false,
+                        parameters.control_enable_request,
                         control_runtime_ready,
                         record->control_mode,
                         record->control_allowed,

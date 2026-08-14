@@ -9,6 +9,9 @@ typedef struct {
     uint16_t pendulum_upright_adc;
     int8_t pendulum_direction;
     uint8_t telemetry_rate_hz;
+    uint32_t control_gate_max_sample_age_us;
+    int32_t control_gate_max_entry_theta_mrad;
+    bool control_enable_request;
     bool dirty;
 } runtime_parameters_t;
 

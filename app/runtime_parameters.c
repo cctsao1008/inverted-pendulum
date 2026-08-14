@@ -8,7 +8,10 @@
 typedef enum {
     PARAMETER_PENDULUM_UPRIGHT_ADC = 0,
     PARAMETER_PENDULUM_DIRECTION,
-    PARAMETER_TELEMETRY_RATE_HZ
+    PARAMETER_TELEMETRY_RATE_HZ,
+    PARAMETER_CONTROL_GATE_MAX_SAMPLE_AGE_US,
+    PARAMETER_CONTROL_GATE_MAX_ENTRY_THETA_MRAD,
+    PARAMETER_CONTROL_ENABLE_REQUEST
 } parameter_id_t;
 
 typedef struct {
@@ -46,6 +49,36 @@ static const parameter_entry_t parameter_entries[] = {
             "1..20"
         },
         PARAMETER_TELEMETRY_RATE_HZ
+    },
+    {
+        {
+            "control.gate.max_sample_age_us",
+            500,
+            10000,
+            2000,
+            "500..10000"
+        },
+        PARAMETER_CONTROL_GATE_MAX_SAMPLE_AGE_US
+    },
+    {
+        {
+            "control.gate.max_entry_theta_mrad",
+            50,
+            1000,
+            250,
+            "50..1000"
+        },
+        PARAMETER_CONTROL_GATE_MAX_ENTRY_THETA_MRAD
+    },
+    {
+        {
+            "control.enable_request",
+            0,
+            1,
+            0,
+            "0|1"
+        },
+        PARAMETER_CONTROL_ENABLE_REQUEST
     }
 };
 
@@ -84,6 +117,15 @@ static int32_t read_value(
     case PARAMETER_TELEMETRY_RATE_HZ:
         return parameters->telemetry_rate_hz;
 
+    case PARAMETER_CONTROL_GATE_MAX_SAMPLE_AGE_US:
+        return (int32_t)parameters->control_gate_max_sample_age_us;
+
+    case PARAMETER_CONTROL_GATE_MAX_ENTRY_THETA_MRAD:
+        return parameters->control_gate_max_entry_theta_mrad;
+
+    case PARAMETER_CONTROL_ENABLE_REQUEST:
+        return parameters->control_enable_request ? 1 : 0;
+
     default:
         return 0;
     }
@@ -107,6 +149,18 @@ static void write_value(
         parameters->telemetry_rate_hz = (uint8_t)value;
         break;
 
+    case PARAMETER_CONTROL_GATE_MAX_SAMPLE_AGE_US:
+        parameters->control_gate_max_sample_age_us = (uint32_t)value;
+        break;
+
+    case PARAMETER_CONTROL_GATE_MAX_ENTRY_THETA_MRAD:
+        parameters->control_gate_max_entry_theta_mrad = value;
+        break;
+
+    case PARAMETER_CONTROL_ENABLE_REQUEST:
+        parameters->control_enable_request = (value != 0);
+        break;
+
     default:
         break;
     }
@@ -122,6 +176,9 @@ void runtime_parameters_init_defaults(
     parameters->pendulum_upright_adc = 2928U;
     parameters->pendulum_direction = 1;
     parameters->telemetry_rate_hz = 10U;
+    parameters->control_gate_max_sample_age_us = 2000U;
+    parameters->control_gate_max_entry_theta_mrad = 250;
+    parameters->control_enable_request = false;
     parameters->dirty = false;
 }
 
