@@ -3,24 +3,18 @@
 #include <stddef.h>
 #include <string.h>
 
-/* SSD1315 command set used by the 128x64 Forest module. */
+/*
+ * SSD1315 command set used by the 128x64 Forest module.  Commands that the
+ * boot banner or the maintenance CLI also name live in the header.
+ */
 #define SSD1315_CMD_LOWER_COLUMN             0x00U
 #define SSD1315_CMD_HIGHER_COLUMN            0x10U
 #define SSD1315_CMD_MEMORY_MODE              0x20U
-#define SSD1315_CMD_SET_COLUMN_ADDRESS       0x21U
-#define SSD1315_CMD_SET_PAGE_ADDRESS         0x22U
 #define SSD1315_CMD_FADE_BLINKING            0x23U
 #define SSD1315_CMD_DEACTIVATE_SCROLL        0x2EU
 #define SSD1315_CMD_START_LINE               0x40U
-#define SSD1315_CMD_CONTRAST                 0x81U
-#define SSD1315_CMD_CHARGE_PUMP              0x8DU
 #define SSD1315_CMD_SEGMENT_REMAP            0xA1U
-#define SSD1315_CMD_RESUME_RAM               0xA4U
-#define SSD1315_CMD_NORMAL_DISPLAY           0xA6U
 #define SSD1315_CMD_MULTIPLEX                0xA8U
-#define SSD1315_CMD_INTERNAL_IREF            0xADU
-#define SSD1315_CMD_DISPLAY_OFF              0xAEU
-#define SSD1315_CMD_DISPLAY_ON               0xAFU
 #define SSD1315_CMD_PAGE_BASE                0xB0U
 #define SSD1315_CMD_COM_SCAN_DEC             0xC8U
 #define SSD1315_CMD_DISPLAY_OFFSET           0xD3U
@@ -28,19 +22,20 @@
 #define SSD1315_CMD_ZOOM                     0xD6U
 #define SSD1315_CMD_PRECHARGE                0xD9U
 #define SSD1315_CMD_COM_PINS                 0xDAU
-#define SSD1315_CMD_VCOM_DESELECT            0xDBU
 
 /*
- * SSD1315 basic profile, cross-checked against libdriver/ssd1315:
- * page addressing, 128x64 multiplex, internal IREF enabled at 19uA,
- * alternative COM pins, VCOMH=0.77*VCC and 7.5V charge-pump mode.
+ * SSD1315 basic profile: page addressing, 128x64 multiplex, alternative COM
+ * pins and 7.5V charge-pump mode.  IREF and VCOMH come from the header, where
+ * their alternatives are listed alongside them.
  */
-#define SSD1315_IREF_INTERNAL_19UA           0x10U
-#define SSD1315_COM_PINS_ALTERNATIVE        0x12U
-#define SSD1315_VCOM_0P77                    0x20U
-#define SSD1315_CHARGE_PUMP_7P5V_ON         0x14U
+#define SSD1315_MEMORY_MODE_PAGE             0x02U
+#define SSD1315_COM_PINS_ALTERNATIVE         0x12U
 #define SSD1315_CLOCK_DEFAULT                0x80U
 #define SSD1315_PRECHARGE_DEFAULT            0xF1U
+
+/* Dwell times for the human-observable boot self test. */
+#define SSD1315_SELF_TEST_ON_MS              500U
+#define SSD1315_SELF_TEST_OFF_MS             250U
 
 static const uint8_t digit_font[10][5] = {
     {0x3EU, 0x51U, 0x49U, 0x45U, 0x3EU},
@@ -169,20 +164,56 @@ static void write_command_pair(
     display->write_command(value, display->context);
 }
 
-static void write_command_triplet(
+static void delay_ms(
     ssd1315_t *display,
-    uint8_t command,
-    uint8_t value0,
-    uint8_t value1)
+    uint32_t milliseconds)
 {
-    display->write_command(command, display->context);
-    display->write_command(value0, display->context);
-    display->write_command(value1, display->context);
+    if (display->delay_ms != NULL) {
+        display->delay_ms(milliseconds, display->context);
+    }
+}
+
+static void apply_init_sequence(ssd1315_t *display)
+{
+    display->reset(display->context);
+
+    display->write_command(SSD1315_CMD_DISPLAY_OFF, display->context);
+
+    /*
+     * Addressing mode first.  The page/column commands the flush path uses
+     * are only meaningful once the controller knows it is in page addressing
+     * mode, and the range-setting commands of the other modes are not sent at
+     * all.
+     */
+    write_command_pair(
+        display, SSD1315_CMD_MEMORY_MODE, SSD1315_MEMORY_MODE_PAGE);
+
+    display->write_command(SSD1315_CMD_START_LINE, display->context);
+    write_command_pair(display, SSD1315_CMD_FADE_BLINKING, 0x00U);
+    display->write_command(SSD1315_CMD_DEACTIVATE_SCROLL, display->context);
+    write_command_pair(display, SSD1315_CMD_ZOOM, 0x00U);
+    write_command_pair(display, SSD1315_CMD_CONTRAST, display->contrast);
+    display->write_command(SSD1315_CMD_SEGMENT_REMAP, display->context);
+    display->write_command(SSD1315_CMD_COM_SCAN_DEC, display->context);
+    display->write_command(SSD1315_CMD_NORMAL_DISPLAY, display->context);
+    write_command_pair(display, SSD1315_CMD_MULTIPLEX, 0x3FU);
+    write_command_pair(display, SSD1315_CMD_DISPLAY_OFFSET, 0x00U);
+    write_command_pair(display, SSD1315_CMD_DISPLAY_CLOCK, SSD1315_CLOCK_DEFAULT);
+    write_command_pair(display, SSD1315_CMD_PRECHARGE, SSD1315_PRECHARGE_DEFAULT);
+    write_command_pair(display, SSD1315_CMD_INTERNAL_IREF, display->iref);
+    write_command_pair(display, SSD1315_CMD_COM_PINS, SSD1315_COM_PINS_ALTERNATIVE);
+    write_command_pair(display, SSD1315_CMD_VCOM_DESELECT, display->vcom);
+    write_command_pair(
+        display, SSD1315_CMD_CHARGE_PUMP, SSD1315_CHARGE_PUMP_ON);
+
+    display->write_command(SSD1315_CMD_RESUME_RAM, display->context);
+    display->write_command(SSD1315_CMD_DISPLAY_ON, display->context);
 }
 
 bool ssd1315_init(
     ssd1315_t *display,
     ssd1315_reset_fn reset,
+    ssd1315_delay_ms_fn delay_callback,
     ssd1315_write_command_fn write_command,
     ssd1315_write_data_fn write_data,
     void *context,
@@ -197,38 +228,85 @@ bool ssd1315_init(
 
     memset(display, 0, sizeof(*display));
     display->reset = reset;
+    display->delay_ms = delay_callback;
     display->write_command = write_command;
     display->write_data = write_data;
     display->context = context;
+    display->contrast = contrast;
+    display->iref = SSD1315_DEFAULT_IREF;
+    display->vcom = SSD1315_DEFAULT_VCOM;
 
-    display->reset(display->context);
-
-    display->write_command(SSD1315_CMD_DISPLAY_OFF, display->context);
-    write_command_triplet(display, SSD1315_CMD_SET_COLUMN_ADDRESS, 0x00U, 0x7FU);
-    write_command_triplet(display, SSD1315_CMD_SET_PAGE_ADDRESS, 0x00U, 0x07U);
-    display->write_command(SSD1315_CMD_START_LINE, display->context);
-    write_command_pair(display, SSD1315_CMD_FADE_BLINKING, 0x00U);
-    display->write_command(SSD1315_CMD_DEACTIVATE_SCROLL, display->context);
-    write_command_pair(display, SSD1315_CMD_ZOOM, 0x00U);
-    write_command_pair(display, SSD1315_CMD_CONTRAST, contrast);
-    display->write_command(SSD1315_CMD_SEGMENT_REMAP, display->context);
-    display->write_command(SSD1315_CMD_COM_SCAN_DEC, display->context);
-    display->write_command(SSD1315_CMD_NORMAL_DISPLAY, display->context);
-    write_command_pair(display, SSD1315_CMD_MULTIPLEX, 0x3FU);
-    write_command_pair(display, SSD1315_CMD_DISPLAY_OFFSET, 0x00U);
-    write_command_pair(display, SSD1315_CMD_DISPLAY_CLOCK, SSD1315_CLOCK_DEFAULT);
-    write_command_pair(display, SSD1315_CMD_PRECHARGE, SSD1315_PRECHARGE_DEFAULT);
-    write_command_pair(display, SSD1315_CMD_INTERNAL_IREF, SSD1315_IREF_INTERNAL_19UA);
-    write_command_pair(display, SSD1315_CMD_COM_PINS, SSD1315_COM_PINS_ALTERNATIVE);
-    write_command_pair(display, SSD1315_CMD_VCOM_DESELECT, SSD1315_VCOM_0P77);
-    write_command_pair(display, SSD1315_CMD_MEMORY_MODE, 0x02U);
-    write_command_pair(display, SSD1315_CMD_CHARGE_PUMP, SSD1315_CHARGE_PUMP_7P5V_ON);
-    display->write_command(SSD1315_CMD_RESUME_RAM, display->context);
-    display->write_command(SSD1315_CMD_DISPLAY_ON, display->context);
+    apply_init_sequence(display);
 
     ssd1315_clear(display);
     display->initialized = true;
     return true;
+}
+
+bool ssd1315_reinit(ssd1315_t *display)
+{
+    if ((display == NULL) || !display->initialized) {
+        return false;
+    }
+
+    apply_init_sequence(display);
+    ssd1315_clear(display);
+    return true;
+}
+
+void ssd1315_self_test(ssd1315_t *display)
+{
+    if ((display == NULL) || !display->initialized) {
+        return;
+    }
+
+    display->write_command(SSD1315_CMD_ENTIRE_ON, display->context);
+    display->write_command(SSD1315_CMD_DISPLAY_ON, display->context);
+    delay_ms(display, SSD1315_SELF_TEST_ON_MS);
+    display->write_command(SSD1315_CMD_DISPLAY_OFF, display->context);
+    delay_ms(display, SSD1315_SELF_TEST_OFF_MS);
+    display->write_command(SSD1315_CMD_DISPLAY_ON, display->context);
+    display->write_command(SSD1315_CMD_RESUME_RAM, display->context);
+    delay_ms(display, SSD1315_SELF_TEST_OFF_MS);
+}
+
+void ssd1315_test_pattern(ssd1315_t *display)
+{
+    uint8_t page;
+    uint8_t row[SSD1315_WIDTH];
+
+    if ((display == NULL) || !display->initialized) {
+        return;
+    }
+
+    display->write_command(SSD1315_CMD_RESUME_RAM, display->context);
+    display->write_command(SSD1315_CMD_DISPLAY_ON, display->context);
+
+    for (page = 0U; page < SSD1315_PAGE_COUNT; page++) {
+        uint8_t column;
+
+        for (column = 0U; column < SSD1315_WIDTH; column++) {
+            row[column] = (((uint8_t)(column + page) & 1U) != 0U)
+                ? 0xAAU
+                : 0x55U;
+        }
+
+        display->write_command(
+            (uint8_t)(SSD1315_CMD_PAGE_BASE | page),
+            display->context);
+        display->write_command(SSD1315_CMD_LOWER_COLUMN, display->context);
+        display->write_command(SSD1315_CMD_HIGHER_COLUMN, display->context);
+        display->write_data(row, sizeof(row), display->context);
+    }
+
+    /* Keep the data-path test visible long enough for a human observation. */
+    delay_ms(display, 1000U);
+
+    /* The hardware RAM no longer matches the framebuffer; force restoration. */
+    display->dirty_pages = 0xFFU;
+    display->flush_active = false;
+    display->flush_page = 0U;
+    display->flush_column = 0U;
 }
 
 void ssd1315_clear(ssd1315_t *display)
@@ -293,7 +371,70 @@ void ssd1315_set_contrast(
         return;
     }
 
+    display->contrast = contrast;
     write_command_pair(display, SSD1315_CMD_CONTRAST, contrast);
+}
+
+void ssd1315_set_iref(
+    ssd1315_t *display,
+    uint8_t iref)
+{
+    if ((display == NULL) || !display->initialized) {
+        return;
+    }
+
+    display->iref = iref;
+    write_command_pair(display, SSD1315_CMD_INTERNAL_IREF, iref);
+}
+
+void ssd1315_set_vcom(
+    ssd1315_t *display,
+    uint8_t vcom)
+{
+    if ((display == NULL) || !display->initialized) {
+        return;
+    }
+
+    display->vcom = vcom;
+    write_command_pair(display, SSD1315_CMD_VCOM_DESELECT, vcom);
+}
+
+uint8_t ssd1315_get_contrast(const ssd1315_t *display)
+{
+    return (display == NULL) ? 0U : display->contrast;
+}
+
+uint8_t ssd1315_get_iref(const ssd1315_t *display)
+{
+    return (display == NULL) ? 0U : display->iref;
+}
+
+uint8_t ssd1315_get_vcom(const ssd1315_t *display)
+{
+    return (display == NULL) ? 0U : display->vcom;
+}
+
+void ssd1315_send_command(
+    ssd1315_t *display,
+    uint8_t command)
+{
+    if ((display == NULL) || !display->initialized) {
+        return;
+    }
+
+    display->write_command(command, display->context);
+}
+
+void ssd1315_send_command_pair(
+    ssd1315_t *display,
+    uint8_t command,
+    uint8_t value)
+{
+    if ((display == NULL) || !display->initialized) {
+        return;
+    }
+
+    write_command_pair(display, command, value);
 }
 
 bool ssd1315_is_idle(const ssd1315_t *display)

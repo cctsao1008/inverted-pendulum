@@ -19,6 +19,63 @@ typedef struct {
     char channel[3];
 } motor_capture_t;
 
+typedef struct {
+    unsigned int call_count;
+    command_oled_operation_t last_operation;
+    uint8_t last_value;
+    uint8_t contrast;
+    uint8_t iref;
+    uint8_t vcom;
+    bool available;
+} oled_capture_t;
+
+static oled_capture_t g_oled;
+
+static bool capture_oled(
+    command_oled_operation_t operation,
+    uint8_t value,
+    void *context)
+{
+    oled_capture_t *capture = context;
+
+    if (!capture->available) {
+        return false;
+    }
+
+    capture->call_count++;
+    capture->last_operation = operation;
+    capture->last_value = value;
+
+    switch (operation) {
+    case COMMAND_OLED_CONTRAST:
+        capture->contrast = value;
+        break;
+    case COMMAND_OLED_IREF:
+        capture->iref = value;
+        break;
+    case COMMAND_OLED_VCOM:
+        capture->vcom = value;
+        break;
+    default:
+        break;
+    }
+
+    return true;
+}
+
+static void capture_oled_status(
+    uint8_t *contrast,
+    uint8_t *iref,
+    uint8_t *vcom,
+    void *context)
+{
+    oled_capture_t *capture = context;
+
+    *contrast = capture->contrast;
+    *iref = capture->iref;
+    *vcom = capture->vcom;
+}
+
 static uint32_t g_fake_now_ms;
 
 static uint32_t fake_now_ms(void *context)
@@ -98,6 +155,11 @@ static void setup(
     output_capture_t *capture)
 {
     memset(capture, 0, sizeof(*capture));
+    memset(&g_oled, 0, sizeof(g_oled));
+    g_oled.available = true;
+    g_oled.contrast = 0xEFU;
+    g_oled.iref = 0x10U;
+    g_oled.vcom = 0x20U;
     g_fake_now_ms = 0U;
     (void)snprintf(
         motor_capture->channel,
@@ -124,6 +186,9 @@ static void setup(
         capture_get_motor_channel,
         capture_set_motor_channel,
         motor_capture,
+        capture_oled,
+        capture_oled_status,
+        &g_oled,
         capture_write,
         capture);
 }
@@ -185,6 +250,101 @@ static void test_invalid_rate_is_rejected(void)
 
     assert(parameters.telemetry_rate_hz == 10U);
     assert(strstr(capture.text, "[ERR]") != NULL);
+}
+
+static void test_oled_sweep_commands_reach_the_panel(void)
+{
+    command_service_t service;
+    runtime_parameters_t parameters;
+    telemetry_toggle_t telemetry;
+    motor_test_service_t motor;
+    motor_capture_t motor_capture = {0};
+    output_capture_t capture;
+
+    setup(&service, &parameters, &telemetry, &motor,
+          &motor_capture, &capture);
+
+    feed_text(&service, "oled all\n");
+    assert(g_oled.last_operation == COMMAND_OLED_ENTIRE_ON);
+
+    feed_text(&service, "oled ram\n");
+    assert(g_oled.last_operation == COMMAND_OLED_RESUME_RAM);
+
+    feed_text(&service, "oled pattern\n");
+    assert(g_oled.last_operation == COMMAND_OLED_PATTERN);
+
+    feed_text(&service, "oled invert on\n");
+    assert(g_oled.last_operation == COMMAND_OLED_INVERT_ON);
+
+    feed_text(&service, "oled pump off\n");
+    assert(g_oled.last_operation == COMMAND_OLED_CHARGE_PUMP);
+    assert(g_oled.last_value == 0U);
+
+    /* Hex is the natural way to type the datasheet's register values. */
+    feed_text(&service, "oled iref 0x30\n");
+    assert(g_oled.last_operation == COMMAND_OLED_IREF);
+    assert(g_oled.iref == 0x30U);
+
+    feed_text(&service, "oled vcom 0x30\n");
+    assert(g_oled.vcom == 0x30U);
+
+    /* Decimal too, because contrast is naturally read as 0..255. */
+    feed_text(&service, "oled contrast 255\n");
+    assert(g_oled.last_operation == COMMAND_OLED_CONTRAST);
+    assert(g_oled.contrast == 255U);
+
+    feed_text(&service, "oled status\n");
+    assert(strstr(capture.text, "iref=0x30") != NULL);
+    assert(strstr(capture.text, "vcom=0x30") != NULL);
+    assert(strstr(capture.text, "contrast=0xFF") != NULL);
+    assert(strstr(capture.text, "readback=unavailable") != NULL);
+}
+
+static void test_oled_raw_sends_each_byte_and_rejects_garbage(void)
+{
+    command_service_t service;
+    runtime_parameters_t parameters;
+    telemetry_toggle_t telemetry;
+    motor_test_service_t motor;
+    motor_capture_t motor_capture = {0};
+    output_capture_t capture;
+    unsigned int before;
+
+    setup(&service, &parameters, &telemetry, &motor,
+          &motor_capture, &capture);
+
+    feed_text(&service, "oled raw 0xAE 0x8D 0x14 0xAF\n");
+    assert(g_oled.call_count == 4U);
+    assert(g_oled.last_operation == COMMAND_OLED_RAW);
+    assert(g_oled.last_value == 0xAFU);
+
+    before = g_oled.call_count;
+    feed_text(&service, "oled raw 0xZZ\n");
+    assert(g_oled.call_count == before);
+    assert(strstr(capture.text, "[ERR]") != NULL);
+
+    before = g_oled.call_count;
+    feed_text(&service, "oled contrast 256\n");
+    assert(g_oled.call_count == before);
+}
+
+static void test_oled_reports_unavailable_without_a_panel_binding(void)
+{
+    command_service_t service;
+    runtime_parameters_t parameters;
+    telemetry_toggle_t telemetry;
+    motor_test_service_t motor;
+    motor_capture_t motor_capture = {0};
+    output_capture_t capture;
+
+    setup(&service, &parameters, &telemetry, &motor,
+          &motor_capture, &capture);
+
+    g_oled.available = false;
+    feed_text(&service, "oled on\n");
+
+    assert(strstr(capture.text, "oled unavailable") != NULL);
+    assert(g_oled.call_count == 0U);
 }
 
 static void test_transport_status_records_architecture_decision(void)
@@ -584,6 +744,9 @@ int main(void)
     test_parameter_set_changes_active_value();
     test_invalid_rate_is_rejected();
     test_transport_status_records_architecture_decision();
+    test_oled_sweep_commands_reach_the_panel();
+    test_oled_raw_sends_each_byte_and_rejects_garbage();
+    test_oled_reports_unavailable_without_a_panel_binding();
     test_overlong_line_is_discarded();
     test_motor_command_requires_arm_and_runs_bounded_test();
     test_motor_channel_selection_stops_and_disarms();

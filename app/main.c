@@ -134,6 +134,83 @@ static bool set_motor_channel(const char *channel, void *context)
     return false;
 }
 
+static bool oled_command(
+    command_oled_operation_t operation,
+    uint8_t value,
+    void *context)
+{
+    ssd1315_t *display = (ssd1315_t *)context;
+
+    if (display == NULL) {
+        return false;
+    }
+
+    switch (operation) {
+    case COMMAND_OLED_DISPLAY_ON:
+        ssd1315_send_command(display, SSD1315_CMD_DISPLAY_ON);
+        break;
+    case COMMAND_OLED_DISPLAY_OFF:
+        ssd1315_send_command(display, SSD1315_CMD_DISPLAY_OFF);
+        break;
+    case COMMAND_OLED_ENTIRE_ON:
+        ssd1315_send_command(display, SSD1315_CMD_ENTIRE_ON);
+        break;
+    case COMMAND_OLED_RESUME_RAM:
+        ssd1315_send_command(display, SSD1315_CMD_RESUME_RAM);
+        break;
+    case COMMAND_OLED_INVERT_ON:
+        ssd1315_send_command(display, SSD1315_CMD_INVERT_DISPLAY);
+        break;
+    case COMMAND_OLED_INVERT_OFF:
+        ssd1315_send_command(display, SSD1315_CMD_NORMAL_DISPLAY);
+        break;
+    case COMMAND_OLED_CONTRAST:
+        ssd1315_set_contrast(display, value);
+        break;
+    case COMMAND_OLED_IREF:
+        ssd1315_set_iref(display, value);
+        break;
+    case COMMAND_OLED_VCOM:
+        ssd1315_set_vcom(display, value);
+        break;
+    case COMMAND_OLED_CHARGE_PUMP:
+        ssd1315_send_command_pair(
+            display,
+            SSD1315_CMD_CHARGE_PUMP,
+            (value != 0U)
+                ? SSD1315_CHARGE_PUMP_ON
+                : SSD1315_CHARGE_PUMP_OFF);
+        break;
+    case COMMAND_OLED_REINIT:
+        return ssd1315_reinit(display);
+    case COMMAND_OLED_SELF_TEST:
+        ssd1315_self_test(display);
+        break;
+    case COMMAND_OLED_PATTERN:
+        ssd1315_test_pattern(display);
+        break;
+    case COMMAND_OLED_RAW:
+    default:
+        ssd1315_send_command(display, value);
+        break;
+    }
+
+    return true;
+}
+
+static void oled_status(
+    uint8_t *contrast,
+    uint8_t *iref,
+    uint8_t *vcom,
+    void *context)
+{
+    const ssd1315_t *display = (const ssd1315_t *)context;
+
+    *contrast = ssd1315_get_contrast(display);
+    *iref = ssd1315_get_iref(display);
+    *vcom = ssd1315_get_vcom(display);
+}
+
 static const char *characterize_phase_name(
     motor_characterize_state_t state)
 {
@@ -191,13 +268,14 @@ int main(void)
     oled_ready = ssd1315_init(
         &oled,
         board_oled_reset,
+        board_oled_delay_ms,
         board_oled_write_command,
         board_oled_write_data,
         NULL,
         local_ui_get_contrast(&local_ui));
 
     if (oled_ready) {
-        board_oled_self_test();
+        ssd1315_self_test(&oled);
     }
 
     key_service_init(
@@ -260,6 +338,9 @@ int main(void)
         get_motor_channel,
         set_motor_channel,
         NULL,
+        oled_command,
+        oled_status,
+        &oled,
         command_write,
         NULL);
 
@@ -283,11 +364,22 @@ int main(void)
     printf("[KEY] M=PA3 X=PA2 +=PA11 -=PA12 USER=PA5 active-low\n");
     printf("[TELEM] USER button toggles output; default=off rate=%u Hz\n",
            (unsigned int)parameters.telemetry_rate_hz);
+    /*
+     * Report what the panel was told, never that it answered.  This link has
+     * no readback, so any "ready" here would be a claim the firmware cannot
+     * make.
+     */
+    printf("[OLED] SSD1315 128x64 soft-spi clk=PB5 data=PB4 reset=PB3 dc=PA15\n");
     printf(
-        "[OLED] SSD1315 128x64 soft-spi=%s clk=PB5 data=PB4 "
-        "reset=PB3 dc=PA15 self-test=%s\n",
-        oled_ready ? "configured" : "error",
-        oled_ready ? "full-on/off" : "skipped");
+        "[OLED] programmed contrast=0x%02X iref=0xAD:0x%02X vcom=0xDB:0x%02X "
+        "pump=on; write-only bus, panel response unverifiable\n",
+        (unsigned int)ssd1315_get_contrast(&oled),
+        (unsigned int)ssd1315_get_iref(&oled),
+        (unsigned int)ssd1315_get_vcom(&oled));
+    printf(
+        "[OLED] driver=%s self-test=%s; type 'oled help' to sweep settings\n",
+        oled_ready ? "commands-sent" : "callback-error",
+        oled_ready ? "entire-on/off/ram" : "skipped");
     printf(
         "[CONTROL] runtime=%s profile=observe-only motor_sink=unbound "
         "arm_home=boot-position\n",

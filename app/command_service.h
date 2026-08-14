@@ -21,6 +21,39 @@ typedef bool (*command_service_set_motor_channel_fn)(
     const char *channel,
     void *context);
 
+/*
+ * The OLED link is write-only, so no software check can tell a working panel
+ * from a dead one.  These operations exist so a single flashed image can sweep
+ * the settings that decide whether the panel lights, one variable at a time,
+ * over the maintenance UART.
+ */
+typedef enum {
+    COMMAND_OLED_DISPLAY_ON = 0,
+    COMMAND_OLED_DISPLAY_OFF,
+    COMMAND_OLED_ENTIRE_ON,
+    COMMAND_OLED_RESUME_RAM,
+    COMMAND_OLED_INVERT_ON,
+    COMMAND_OLED_INVERT_OFF,
+    COMMAND_OLED_CONTRAST,
+    COMMAND_OLED_IREF,
+    COMMAND_OLED_VCOM,
+    COMMAND_OLED_CHARGE_PUMP,
+    COMMAND_OLED_REINIT,
+    COMMAND_OLED_SELF_TEST,
+    COMMAND_OLED_PATTERN,
+    COMMAND_OLED_RAW
+} command_oled_operation_t;
+
+typedef bool (*command_service_oled_fn)(
+    command_oled_operation_t operation,
+    uint8_t value,
+    void *context);
+typedef void (*command_service_oled_status_fn)(
+    uint8_t *contrast,
+    uint8_t *iref,
+    uint8_t *vcom,
+    void *context);
+
 typedef struct {
     runtime_parameters_t *parameters;
     telemetry_toggle_t *telemetry;
@@ -30,6 +63,9 @@ typedef struct {
     command_service_get_motor_channel_fn get_motor_channel;
     command_service_set_motor_channel_fn set_motor_channel;
     void *motor_channel_context;
+    command_service_oled_fn oled;
+    command_service_oled_status_fn oled_status;
+    void *oled_context;
     command_service_write_fn write;
     void *write_context;
     char line[COMMAND_SERVICE_LINE_CAPACITY];
@@ -56,6 +92,9 @@ void command_service_init(
     command_service_get_motor_channel_fn get_motor_channel,
     command_service_set_motor_channel_fn set_motor_channel,
     void *motor_channel_context,
+    command_service_oled_fn oled,
+    command_service_oled_status_fn oled_status,
+    void *oled_context,
     command_service_write_fn write,
     void *write_context);
 

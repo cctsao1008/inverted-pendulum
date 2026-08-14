@@ -812,6 +812,250 @@ static void execute_parameter(
         "defaults\n");
 }
 
+static bool parse_byte(const char *text, uint8_t *value)
+{
+    const char *digits = text;
+    char *end = NULL;
+    int base = 10;
+    long parsed;
+
+    if ((digits[0] == '0') &&
+        ((digits[1] == 'x') || (digits[1] == 'X'))) {
+        base = 16;
+        digits += 2;
+    }
+
+    errno = 0;
+    parsed = strtol(digits, &end, base);
+
+    if ((errno != 0) ||
+        (end == digits) ||
+        (*end != '\0') ||
+        (parsed < 0) ||
+        (parsed > 255)) {
+        return false;
+    }
+
+    *value = (uint8_t)parsed;
+    return true;
+}
+
+static bool oled_apply(
+    command_service_t *service,
+    command_oled_operation_t operation,
+    uint8_t value)
+{
+    if (service->oled == NULL) {
+        return false;
+    }
+
+    return service->oled(operation, value, service->oled_context);
+}
+
+static void oled_report(
+    command_service_t *service,
+    const char *action,
+    bool applied)
+{
+    if (applied) {
+        write_response(service, "[OK] oled %s sent\n", action);
+    } else {
+        write_response(service, "[ERR] oled unavailable\n");
+    }
+}
+
+static void execute_oled_status(command_service_t *service)
+{
+    uint8_t contrast = 0U;
+    uint8_t iref = 0U;
+    uint8_t vcom = 0U;
+
+    if (service->oled_status == NULL) {
+        write_response(service, "[ERR] oled unavailable\n");
+        return;
+    }
+
+    service->oled_status(
+        &contrast,
+        &iref,
+        &vcom,
+        service->oled_context);
+
+    /*
+     * Report what the panel was last told, not what it acknowledged: this bus
+     * has no readback, so nothing here is evidence the panel received it.
+     */
+    write_response(
+        service,
+        "[OK] oled programmed contrast=0x%02X iref=0x%02X vcom=0x%02X "
+        "readback=unavailable\n",
+        (unsigned int)contrast,
+        (unsigned int)iref,
+        (unsigned int)vcom);
+}
+
+static void execute_oled_raw(
+    command_service_t *service,
+    size_t count,
+    char **arguments)
+{
+    size_t index;
+
+    for (index = 2U; index < count; index++) {
+        uint8_t byte;
+
+        if (!parse_byte(arguments[index], &byte)) {
+            write_response(
+                service,
+                "[ERR] oled raw expects byte values: %s\n",
+                arguments[index]);
+            return;
+        }
+
+        if (!oled_apply(service, COMMAND_OLED_RAW, byte)) {
+            write_response(service, "[ERR] oled unavailable\n");
+            return;
+        }
+    }
+
+    write_response(
+        service,
+        "[OK] oled raw sent count=%u\n",
+        (unsigned int)(count - 2U));
+}
+
+static void execute_oled(
+    command_service_t *service,
+    size_t count,
+    char **arguments)
+{
+    uint8_t value;
+
+    if ((count == 1U) ||
+        ((count == 2U) && (strcmp(arguments[1], "status") == 0))) {
+        execute_oled_status(service);
+        return;
+    }
+
+    if ((count == 2U) && (strcmp(arguments[1], "help") == 0)) {
+        write_response(
+            service,
+            "[OK] oled status|on|off|all|ram|selftest|pattern|reinit; "
+            "invert on|off; pump on|off; "
+            "contrast|iref|vcom <byte>; raw <byte>...\n");
+        return;
+    }
+
+    if (count == 2U) {
+        if (strcmp(arguments[1], "on") == 0) {
+            oled_report(
+                service, "on",
+                oled_apply(service, COMMAND_OLED_DISPLAY_ON, 0U));
+            return;
+        }
+        if (strcmp(arguments[1], "off") == 0) {
+            oled_report(
+                service, "off",
+                oled_apply(service, COMMAND_OLED_DISPLAY_OFF, 0U));
+            return;
+        }
+        if (strcmp(arguments[1], "all") == 0) {
+            oled_report(
+                service, "all",
+                oled_apply(service, COMMAND_OLED_ENTIRE_ON, 0U));
+            return;
+        }
+        if (strcmp(arguments[1], "ram") == 0) {
+            oled_report(
+                service, "ram",
+                oled_apply(service, COMMAND_OLED_RESUME_RAM, 0U));
+            return;
+        }
+        if (strcmp(arguments[1], "reinit") == 0) {
+            oled_report(
+                service, "reinit",
+                oled_apply(service, COMMAND_OLED_REINIT, 0U));
+            return;
+        }
+        if (strcmp(arguments[1], "selftest") == 0) {
+            oled_report(
+                service, "selftest",
+                oled_apply(service, COMMAND_OLED_SELF_TEST, 0U));
+            return;
+        }
+        if (strcmp(arguments[1], "pattern") == 0) {
+            oled_report(
+                service, "pattern",
+                oled_apply(service, COMMAND_OLED_PATTERN, 0U));
+            return;
+        }
+    }
+
+    if ((count == 3U) && (strcmp(arguments[1], "invert") == 0)) {
+        if (strcmp(arguments[2], "on") == 0) {
+            oled_report(
+                service, "invert on",
+                oled_apply(service, COMMAND_OLED_INVERT_ON, 0U));
+            return;
+        }
+        if (strcmp(arguments[2], "off") == 0) {
+            oled_report(
+                service, "invert off",
+                oled_apply(service, COMMAND_OLED_INVERT_OFF, 0U));
+            return;
+        }
+    }
+
+    if ((count == 3U) && (strcmp(arguments[1], "pump") == 0)) {
+        if (strcmp(arguments[2], "on") == 0) {
+            oled_report(
+                service, "pump on",
+                oled_apply(service, COMMAND_OLED_CHARGE_PUMP, 1U));
+            return;
+        }
+        if (strcmp(arguments[2], "off") == 0) {
+            oled_report(
+                service, "pump off",
+                oled_apply(service, COMMAND_OLED_CHARGE_PUMP, 0U));
+            return;
+        }
+    }
+
+    if ((count == 3U) &&
+        ((strcmp(arguments[1], "contrast") == 0) ||
+         (strcmp(arguments[1], "iref") == 0) ||
+         (strcmp(arguments[1], "vcom") == 0))) {
+        command_oled_operation_t operation = COMMAND_OLED_CONTRAST;
+
+        if (strcmp(arguments[1], "iref") == 0) {
+            operation = COMMAND_OLED_IREF;
+        } else if (strcmp(arguments[1], "vcom") == 0) {
+            operation = COMMAND_OLED_VCOM;
+        }
+
+        if (!parse_byte(arguments[2], &value)) {
+            write_response(
+                service,
+                "[ERR] oled %s expects 0..255 or 0xNN\n",
+                arguments[1]);
+            return;
+        }
+
+        oled_report(
+            service,
+            arguments[1],
+            oled_apply(service, operation, value));
+        return;
+    }
+
+    if ((count >= 3U) && (strcmp(arguments[1], "raw") == 0)) {
+        execute_oled_raw(service, count, arguments);
+        return;
+    }
+
+    write_response(service, "[ERR] try: oled help\n");
+}
+
 static void execute_transport(
     command_service_t *service,
     size_t count,
@@ -1061,6 +1305,9 @@ void command_service_init(
     command_service_get_motor_channel_fn get_motor_channel,
     command_service_set_motor_channel_fn set_motor_channel,
     void *motor_channel_context,
+    command_service_oled_fn oled,
+    command_service_oled_status_fn oled_status,
+    void *oled_context,
     command_service_write_fn write,
     void *write_context)
 {
@@ -1072,6 +1319,9 @@ void command_service_init(
     service->get_motor_channel = get_motor_channel;
     service->set_motor_channel = set_motor_channel;
     service->motor_channel_context = motor_channel_context;
+    service->oled = oled;
+    service->oled_status = oled_status;
+    service->oled_context = oled_context;
     service->write = write;
     service->write_context = write_context;
     service->length = 0U;
@@ -1105,7 +1355,8 @@ void command_service_execute_line(
         (strcmp(arguments[0], "help") == 0)) {
         write_response(
             service,
-            "[OK] commands: help status script telem param transport motor\n");
+            "[OK] commands: help status script telem param transport motor "
+            "oled\n");
     } else if ((count == 1U) &&
                (strcmp(arguments[0], "status") == 0)) {
         execute_status(service);
@@ -1119,6 +1370,8 @@ void command_service_execute_line(
         execute_transport(service, count, arguments);
     } else if (strcmp(arguments[0], "motor") == 0) {
         execute_motor(service, count, arguments);
+    } else if (strcmp(arguments[0], "oled") == 0) {
+        execute_oled(service, count, arguments);
     } else {
         write_response(
             service,
