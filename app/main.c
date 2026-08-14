@@ -62,6 +62,8 @@ typedef struct {
     uint16_t length;
 } text_buffer_t;
 
+static const char *control_mode_name(control_mode_t mode);
+
 static void text_put_char(text_buffer_t *buffer, char value)
 {
     if (buffer->length < (uint16_t)sizeof(buffer->data)) {
