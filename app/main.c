@@ -37,6 +37,132 @@ typedef struct {
     control_trace_record_t latest;
 } control_trace_capture_t;
 
+typedef struct {
+    bool pending;
+    uint32_t timestamp_us;
+    uint16_t adc_raw;
+    int32_t angle_mrad;
+    int32_t encoder_count;
+    uint16_t vbus_raw;
+    uint32_t vbus_mv;
+    bool control_valid;
+    control_mode_t control_mode;
+    bool control_allowed;
+    uint32_t fault_flags;
+    int32_t theta_mrad;
+    int32_t theta_rate_mrad_s;
+    int32_t phi_mrad;
+    int32_t phi_rate_mrad_s;
+    uint32_t sample_age_us;
+    uint32_t missed_cycles;
+} telemetry_report_t;
+
+typedef struct {
+    char data[256];
+    uint16_t length;
+} text_buffer_t;
+
+static void text_put_char(text_buffer_t *buffer, char value)
+{
+    if (buffer->length < (uint16_t)sizeof(buffer->data)) {
+        buffer->data[buffer->length++] = value;
+    }
+}
+
+static void text_put_string(text_buffer_t *buffer, const char *text)
+{
+    while ((text != NULL) && (*text != '\0')) {
+        text_put_char(buffer, *text++);
+    }
+}
+
+static void text_put_u32(text_buffer_t *buffer, uint32_t value)
+{
+    char digits[10];
+    uint8_t count = 0U;
+
+    do {
+        digits[count++] = (char)('0' + (value % 10U));
+        value /= 10U;
+    } while ((value != 0U) && (count < sizeof(digits)));
+
+    while (count != 0U) {
+        text_put_char(buffer, digits[--count]);
+    }
+}
+
+static void text_put_i32(text_buffer_t *buffer, int32_t value)
+{
+    uint32_t magnitude;
+
+    if (value < 0) {
+        text_put_char(buffer, '-');
+        magnitude = (uint32_t)(-(value + 1)) + 1U;
+    } else {
+        magnitude = (uint32_t)value;
+    }
+
+    text_put_u32(buffer, magnitude);
+}
+
+static void text_put_hex32(text_buffer_t *buffer, uint32_t value)
+{
+    static const char hex[] = "0123456789ABCDEF";
+    int8_t shift;
+
+    for (shift = 28; shift >= 0; shift -= 4) {
+        text_put_char(
+            buffer,
+            hex[(value >> (uint8_t)shift) & 0x0FU]);
+    }
+}
+
+static void telemetry_write_report(const telemetry_report_t *report)
+{
+    text_buffer_t line = {{0}, 0U};
+
+    text_put_string(&line, "[SENS] t_us=");
+    text_put_u32(&line, report->timestamp_us);
+    text_put_string(&line, " adc=");
+    text_put_u32(&line, report->adc_raw);
+    text_put_string(&line, " angle_mrad=");
+    text_put_i32(&line, report->angle_mrad);
+    text_put_string(&line, " enc=");
+    text_put_i32(&line, report->encoder_count);
+    text_put_string(&line, " vbus_adc=");
+    text_put_u32(&line, report->vbus_raw);
+    text_put_string(&line, " vbus_mV=");
+    text_put_u32(&line, report->vbus_mv);
+    text_put_char(&line, '\n');
+    board_uart_write(line.data, line.length);
+
+    if (!report->control_valid) {
+        return;
+    }
+
+    line.length = 0U;
+    text_put_string(&line, "[CTRL] mode=");
+    text_put_string(&line, control_mode_name(report->control_mode));
+    text_put_string(&line, " allowed=");
+    text_put_u32(&line, report->control_allowed ? 1U : 0U);
+    text_put_string(&line, " faults=0x");
+    text_put_hex32(&line, report->fault_flags);
+    text_put_string(&line, " theta_mrad=");
+    text_put_i32(&line, report->theta_mrad);
+    text_put_string(&line, " theta_rate_mrad_s=");
+    text_put_i32(&line, report->theta_rate_mrad_s);
+    text_put_string(&line, " phi_mrad=");
+    text_put_i32(&line, report->phi_mrad);
+    text_put_string(&line, " phi_rate_mrad_s=");
+    text_put_i32(&line, report->phi_rate_mrad_s);
+    text_put_string(&line, " sample_age_us=");
+    text_put_u32(&line, report->sample_age_us);
+    text_put_string(&line, " missed_cycles=");
+    text_put_u32(&line, report->missed_cycles);
+    text_put_string(&line, " motor_sink=unbound\n");
+    board_uart_write(line.data, line.length);
+}
+
 static void command_write(
     const char *text,
     void *context)
@@ -272,6 +398,7 @@ int main(void)
     control_sensor_adapter_t control_sensor_adapter;
     app_control_profile_t control_profile;
     control_trace_capture_t control_trace_capture = {0};
+    telemetry_report_t telemetry_report = {0};
     static ssd1315_t oled;
     static local_ui_frame_t local_ui_frame;
 
@@ -775,8 +902,6 @@ int main(void)
                 telemetry_phase += parameters.telemetry_rate_hz;
 
                 if (telemetry_phase >= CONTROL_FREQUENCY_HZ) {
-                    int32_t angle_mrad =
-                        (int32_t)(pendulum_angle_rad * 1000.0F);
                     uint16_t vbus_raw;
                     uint32_t vbus_mv;
 
@@ -786,43 +911,41 @@ int main(void)
                     vbus_mv =
                         board_adc_vbus_raw_to_millivolts(vbus_raw);
 
-                    printf("[SENS] t_us=%lu adc=%u angle_mrad=%ld enc=%ld vbus_adc=%u vbus_mV=%lu\n",
-                           (unsigned long)timestamp_us,
-                           (unsigned int)adc_raw,
-                           (long)angle_mrad,
-                           (long)encoder_count,
-                           (unsigned int)vbus_raw,
-                           (unsigned long)vbus_mv);
+                    telemetry_report.timestamp_us = timestamp_us;
+                    telemetry_report.adc_raw = adc_raw;
+                    telemetry_report.angle_mrad =
+                        (int32_t)(pendulum_angle_rad * 1000.0F);
+                    telemetry_report.encoder_count = encoder_count;
+                    telemetry_report.vbus_raw = vbus_raw;
+                    telemetry_report.vbus_mv = vbus_mv;
+                    telemetry_report.control_valid =
+                        control_cycle_due &&
+                        control_trace_capture.valid;
 
-                    if (control_cycle_due &&
-                        control_trace_capture.valid) {
+                    if (telemetry_report.control_valid) {
                         const control_trace_record_t *record =
                             &control_trace_capture.latest;
-                        int32_t theta_mrad = (int32_t)(
+                        telemetry_report.control_mode =
+                            record->control_mode;
+                        telemetry_report.control_allowed =
+                            record->control_allowed;
+                        telemetry_report.fault_flags =
+                            record->state_safety_flags;
+                        telemetry_report.theta_mrad = (int32_t)(
                             record->state.pendulum_angle_rad * 1000.0F);
-                        int32_t theta_rate_mrad_s = (int32_t)(
+                        telemetry_report.theta_rate_mrad_s = (int32_t)(
                             record->state.pendulum_rate_rad_s * 1000.0F);
-                        int32_t phi_mrad = (int32_t)(
+                        telemetry_report.phi_mrad = (int32_t)(
                             record->state.arm_angle_rad * 1000.0F);
-                        int32_t phi_rate_mrad_s = (int32_t)(
+                        telemetry_report.phi_rate_mrad_s = (int32_t)(
                             record->state.arm_rate_rad_s * 1000.0F);
-
-                        printf(
-                            "[CTRL] mode=%s allowed=%u faults=0x%08lx "
-                            "theta_mrad=%ld theta_rate_mrad_s=%ld "
-                            "phi_mrad=%ld phi_rate_mrad_s=%ld "
-                            "sample_age_us=%lu missed_cycles=%lu "
-                            "motor_sink=unbound\n",
-                            control_mode_name(record->control_mode),
-                            record->control_allowed ? 1U : 0U,
-                            (unsigned long)record->state_safety_flags,
-                            (long)theta_mrad,
-                            (long)theta_rate_mrad_s,
-                            (long)phi_mrad,
-                            (long)phi_rate_mrad_s,
-                            (unsigned long)record->sensor.sample_age_us,
-                            (unsigned long)control_missed_cycles);
+                        telemetry_report.sample_age_us =
+                            record->sensor.sample_age_us;
                     }
+
+                    telemetry_report.missed_cycles =
+                        control_missed_cycles;
+                    telemetry_report.pending = true;
                 }
             } else {
                 telemetry_phase = 0U;
@@ -1009,6 +1132,16 @@ int main(void)
             ssd1315_service(
                 &oled,
                 OLED_BACKGROUND_FLUSH_BYTES);
+        }
+
+        /*
+         * Formatting is intentionally outside the 1 kHz scheduled workload.
+         * The UART driver only enqueues the resulting bytes and DMA performs
+         * the physical transmission.
+         */
+        if (telemetry_report.pending) {
+            telemetry_report.pending = false;
+            telemetry_write_report(&telemetry_report);
         }
 
         /*
