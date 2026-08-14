@@ -468,3 +468,24 @@ add_test(
     NAME ssd1315
     COMMAND test_ssd1315
 )
+
+add_executable(test_motor_authority
+    test_motor_authority.c
+    ${PROJECT_SOURCE_DIR}/app/motor_authority.c
+)
+
+target_include_directories(test_motor_authority PRIVATE
+    ${PROJECT_SOURCE_DIR}/app
+)
+
+target_compile_options(test_motor_authority PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME motor_authority
+    COMMAND test_motor_authority
+)

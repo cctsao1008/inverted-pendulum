@@ -20,6 +20,7 @@
 #include "control_sensor_adapter.h"
 #include "key_service.h"
 #include "local_ui.h"
+#include "motor_authority.h"
 #include "motor_test_service.h"
 #include "pendulum_angle.h"
 #include "runtime_parameters.h"
@@ -173,12 +174,49 @@ static void command_write(
     board_uart_write(text, (uint32_t)strlen(text));
 }
 
-static void motor_test_output(
+static void motor_authority_board_output(
     int8_t signed_percent,
     void *context)
 {
     (void)context;
     board_motor_set_percent(signed_percent);
+}
+
+static void motor_test_output(
+    int8_t signed_percent,
+    void *context)
+{
+    motor_authority_t *authority =
+        (motor_authority_t *)context;
+
+    if (authority == NULL) {
+        return;
+    }
+
+    if (signed_percent != 0) {
+        if (!motor_authority_acquire(
+                authority,
+                MOTOR_AUTHORITY_MAINTENANCE)) {
+            return;
+        }
+
+        (void)motor_authority_apply(
+            authority,
+            MOTOR_AUTHORITY_MAINTENANCE,
+            signed_percent);
+        return;
+    }
+
+    if (motor_authority_owner(authority) ==
+        MOTOR_AUTHORITY_MAINTENANCE) {
+        (void)motor_authority_apply(
+            authority,
+            MOTOR_AUTHORITY_MAINTENANCE,
+            0);
+        motor_authority_release(
+            authority,
+            MOTOR_AUTHORITY_MAINTENANCE);
+    }
 }
 
 static uint32_t read_vbus_millivolts(void *context)
@@ -392,6 +430,7 @@ int main(void)
         MOTOR_CHARACTERIZE_IDLE;
     telemetry_toggle_t telemetry_toggle;
     runtime_parameters_t parameters;
+    motor_authority_t motor_authority;
     motor_test_service_t motor_test;
     command_service_t command_service;
     key_service_t key_service;
@@ -407,6 +446,10 @@ int main(void)
     board_clock_init();
     board_led_init();
     board_motor_init();
+    motor_authority_init(
+        &motor_authority,
+        motor_authority_board_output,
+        NULL);
     board_button_init();
     board_uart_init(115200U);
     board_adc_init();
@@ -474,7 +517,7 @@ int main(void)
     motor_test_service_init_with_encoder(
         &motor_test,
         motor_test_output,
-        NULL,
+        &motor_authority,
         read_monotonic_milliseconds,
         NULL,
         read_motor_encoder,
@@ -545,6 +588,10 @@ int main(void)
         "[CONTROL] runtime=%s profile=observe-only motor_sink=unbound "
         "arm_home=boot-position\n",
         control_runtime_ready ? "ready" : "config-error");
+    printf(
+        "[MOTOR_AUTH] owner=%s maintenance=arbiter control=unbound fault=latching\n",
+        motor_authority_owner_name(
+            motor_authority_owner(&motor_authority)));
     printf("[MOTOR] channel=d2 default; d1=PB0/CH3+PB14/PB15; d2=PB1/CH4+PB13/PB12; 20kHz\n");
     printf("[PATTERN] right=+15%%/5s left=-15%%/5s both=right/5s-stop/1s-left/5s\n");
     printf("[COMMISSION] characterize=5..30%% rise/2%% fall/1%%; "
