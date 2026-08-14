@@ -239,6 +239,10 @@ int main(void)
     uint32_t perf_control_max_us = 0U;
     uint32_t perf_work_total_us = 0U;
     uint32_t perf_work_max_us = 0U;
+    uint32_t perf_telemetry_total_us = 0U;
+    uint32_t perf_telemetry_max_us = 0U;
+    uint32_t perf_oled_total_us = 0U;
+    uint32_t perf_oled_max_us = 0U;
     uint32_t perf_missed_base = 0U;
     uint32_t control_missed_cycles = 0U;
     bool control_runtime_ready;
@@ -248,6 +252,10 @@ int main(void)
     uint32_t perf_report_control_max_us = 0U;
     uint32_t perf_report_work_avg_us = 0U;
     uint32_t perf_report_work_max_us = 0U;
+    uint32_t perf_report_telemetry_avg_us = 0U;
+    uint32_t perf_report_telemetry_max_us = 0U;
+    uint32_t perf_report_oled_avg_us = 0U;
+    uint32_t perf_report_oled_max_us = 0U;
     uint32_t perf_report_missed = 0U;
     uint16_t last_control_upright_adc;
     int8_t last_control_pendulum_direction;
@@ -454,6 +462,8 @@ int main(void)
             uint32_t control_path_start_us = 0U;
             uint32_t tick_work_start_us = 0U;
             uint32_t control_path_us = 0U;
+            uint32_t telemetry_work_us = 0U;
+            uint32_t oled_work_us = 0U;
 
             last_tick++;
             control_cycle_due = (last_tick == current_tick);
@@ -757,6 +767,10 @@ int main(void)
 
             led_divider++;
 
+            if (control_cycle_due) {
+                telemetry_work_us = board_time_micros();
+            }
+
             if (telemetry_toggle_is_enabled(&telemetry_toggle)) {
                 telemetry_phase += parameters.telemetry_rate_hz;
 
@@ -812,6 +826,12 @@ int main(void)
                 }
             } else {
                 telemetry_phase = 0U;
+            }
+
+            if (control_cycle_due) {
+                telemetry_work_us =
+                    board_time_micros() - telemetry_work_us;
+                oled_work_us = board_time_micros();
             }
 
             if (control_cycle_due && oled_ready) {
@@ -895,6 +915,11 @@ int main(void)
                     OLED_FLUSH_BYTES_PER_TICK);
             }
 
+            if (control_cycle_due) {
+                oled_work_us =
+                    board_time_micros() - oled_work_us;
+            }
+
             if (led_divider >= LED_TOGGLE_TICKS) {
                 led_divider = 0U;
                 board_led_toggle();
@@ -907,6 +932,15 @@ int main(void)
                 perf_ticks++;
                 perf_control_total_us += control_path_us;
                 perf_work_total_us += tick_work_us;
+                perf_telemetry_total_us += telemetry_work_us;
+                perf_oled_total_us += oled_work_us;
+
+                if (telemetry_work_us > perf_telemetry_max_us) {
+                    perf_telemetry_max_us = telemetry_work_us;
+                }
+                if (oled_work_us > perf_oled_max_us) {
+                    perf_oled_max_us = oled_work_us;
+                }
 
                 if (control_path_us > perf_control_max_us) {
                     perf_control_max_us = control_path_us;
@@ -922,6 +956,14 @@ int main(void)
                     perf_report_work_avg_us =
                         perf_work_total_us / perf_ticks;
                     perf_report_work_max_us = perf_work_max_us;
+                    perf_report_telemetry_avg_us =
+                        perf_telemetry_total_us / perf_ticks;
+                    perf_report_telemetry_max_us =
+                        perf_telemetry_max_us;
+                    perf_report_oled_avg_us =
+                        perf_oled_total_us / perf_ticks;
+                    perf_report_oled_max_us =
+                        perf_oled_max_us;
                     perf_report_missed =
                         control_missed_cycles - perf_missed_base;
                     perf_missed_base = control_missed_cycles;
@@ -930,6 +972,10 @@ int main(void)
                     perf_control_max_us = 0U;
                     perf_work_total_us = 0U;
                     perf_work_max_us = 0U;
+                    perf_telemetry_total_us = 0U;
+                    perf_telemetry_max_us = 0U;
+                    perf_oled_total_us = 0U;
+                    perf_oled_max_us = 0U;
                     perf_report_due = true;
                 }
             }
@@ -947,6 +993,13 @@ int main(void)
                 (unsigned long)(perf_report_work_avg_us / 10U),
                 (unsigned long)(perf_report_work_avg_us % 10U),
                 (unsigned long)perf_report_missed);
+            printf(
+                "[PERF_SUB] telem_avg_us=%lu telem_max_us=%lu "
+                "oled_avg_us=%lu oled_max_us=%lu\n",
+                (unsigned long)perf_report_telemetry_avg_us,
+                (unsigned long)perf_report_telemetry_max_us,
+                (unsigned long)perf_report_oled_avg_us,
+                (unsigned long)perf_report_oled_max_us);
             perf_report_due = false;
         }
 
