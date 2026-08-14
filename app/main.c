@@ -589,9 +589,11 @@ int main(void)
         "arm_home=boot-position\n",
         control_runtime_ready ? "ready" : "config-error");
     printf(
-        "[MOTOR_AUTH] owner=%s maintenance=arbiter control=unbound fault=latching\n",
+        "[MOTOR_AUTH] owner=%s maintenance=arbiter control=unbound "
+        "gate=disabled watchdog=%lums fault=latching\n",
         motor_authority_owner_name(
-            motor_authority_owner(&motor_authority)));
+            motor_authority_owner(&motor_authority)),
+        (unsigned long)MOTOR_AUTHORITY_CONTROL_TIMEOUT_MS);
     printf("[MOTOR] channel=d2 default; d1=PB0/CH3+PB14/PB15; d2=PB1/CH4+PB13/PB12; 20kHz\n");
     printf("[PATTERN] right=+15%%/5s left=-15%%/5s both=right/5s-stop/1s-left/5s\n");
     printf("[COMMISSION] characterize=5..30%% rise/2%% fall/1%%; "
@@ -698,6 +700,10 @@ int main(void)
                 control_path_us =
                     board_time_micros() - control_path_start_us;
             }
+
+            (void)motor_authority_update_1ms(
+                &motor_authority,
+                last_tick);
 
             motor_test_completed =
                 motor_test_service_update_1ms(&motor_test);
