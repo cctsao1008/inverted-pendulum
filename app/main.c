@@ -14,6 +14,7 @@
 #include "board_time.h"
 #include "board_uart.h"
 #include "build_info.h"
+#include "closed_loop_enable_gate.h"
 #include "command_service.h"
 #include "control_pipeline.h"
 #include "control_profile.h"
@@ -56,6 +57,8 @@ typedef struct {
     int32_t phi_rate_mrad_s;
     uint32_t sample_age_us;
     uint32_t missed_cycles;
+    bool gate_allowed;
+    uint32_t gate_reject_flags;
 } telemetry_report_t;
 
 typedef struct {
@@ -162,6 +165,10 @@ static void telemetry_write_report(const telemetry_report_t *report)
     text_put_u32(&line, report->sample_age_us);
     text_put_string(&line, " missed_cycles=");
     text_put_u32(&line, report->missed_cycles);
+    text_put_string(&line, " gate_allowed=");
+    text_put_u32(&line, report->gate_allowed ? 1U : 0U);
+    text_put_string(&line, " gate_reject=0x");
+    text_put_hex32(&line, report->gate_reject_flags);
     text_put_string(&line, " motor_sink=unbound\n");
     board_uart_write(line.data, line.length);
 }
@@ -439,6 +446,9 @@ int main(void)
     control_sensor_adapter_t control_sensor_adapter;
     app_control_profile_t control_profile;
     control_trace_capture_t control_trace_capture = {0};
+    closed_loop_gate_config_t closed_loop_gate_config;
+    closed_loop_gate_result_t closed_loop_gate_result = {
+        false, CLOSED_LOOP_GATE_REJECT_CONFIG};
     telemetry_report_t telemetry_report = {0};
     static ssd1315_t oled;
     static local_ui_frame_t local_ui_frame;
@@ -488,6 +498,9 @@ int main(void)
     app_control_profile_init_observe_only(
         &control_profile,
         1.0F / (float)CONTROL_FREQUENCY_HZ);
+
+    closed_loop_gate_config_init_unconfigured(
+        &closed_loop_gate_config);
 
     control_sensor_adapter_init(
         &control_sensor_adapter,
@@ -588,6 +601,9 @@ int main(void)
         "[CONTROL] runtime=%s profile=observe-only motor_sink=unbound "
         "arm_home=boot-position\n",
         control_runtime_ready ? "ready" : "config-error");
+    printf(
+        "[CONTROL_GATE] mode=observe-only operator=disabled "
+        "config=unconfigured allowed=0 motor_sink=unbound\n");
     printf(
         "[MOTOR_AUTH] owner=%s maintenance=arbiter control=unbound "
         "gate=disabled watchdog=%lums fault=latching\n",
@@ -692,6 +708,27 @@ int main(void)
                     parameters.pendulum_upright_adc,
                     parameters.pendulum_direction);
                 control_pipeline_step(&control_pipeline);
+
+                if (control_trace_capture.valid) {
+                    const control_trace_record_t *record =
+                        &control_trace_capture.latest;
+                    closed_loop_gate_input_t gate_input = {
+                        false,
+                        control_runtime_ready,
+                        record->control_mode,
+                        record->control_allowed,
+                        record->sensor.sample_age_us,
+                        (int32_t)(
+                            record->state.pendulum_angle_rad *
+                            1000.0F),
+                        motor_authority_owner(&motor_authority)
+                    };
+
+                    closed_loop_gate_result =
+                        closed_loop_gate_evaluate(
+                            &closed_loop_gate_config,
+                            &gate_input);
+                }
             }
 
             board_profile_low();
@@ -1000,6 +1037,10 @@ int main(void)
 
                     telemetry_report.missed_cycles =
                         control_missed_cycles;
+                    telemetry_report.gate_allowed =
+                        closed_loop_gate_result.allowed;
+                    telemetry_report.gate_reject_flags =
+                        closed_loop_gate_result.reject_flags;
                     telemetry_report.pending = true;
                 }
             } else {
