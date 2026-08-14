@@ -3,6 +3,7 @@
 #include <stddef.h>
 
 #include <libopencm3/cm3/nvic.h>
+#include <libopencm3/stm32/dma.h>
 #include <libopencm3/stm32/f1/nvic.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
@@ -18,7 +19,41 @@
 static uint8_t g_tx_buffer[BOARD_UART_TX_BUFFER_SIZE];
 static volatile uint16_t g_tx_head;
 static volatile uint16_t g_tx_tail;
+static volatile uint16_t g_tx_dma_length;
 static volatile uint32_t g_tx_dropped_bytes;
+static volatile bool g_tx_dma_active;
+
+static void board_uart_tx_dma_kick(void)
+{
+    uint16_t head;
+    uint16_t tail;
+    uint16_t length;
+
+    if (g_tx_dma_active) {
+        return;
+    }
+
+    head = g_tx_head;
+    tail = g_tx_tail;
+    if (head == tail) {
+        return;
+    }
+
+    length = (head > tail)
+        ? (uint16_t)(head - tail)
+        : (uint16_t)(BOARD_UART_TX_BUFFER_SIZE - tail);
+
+    g_tx_dma_length = length;
+    g_tx_dma_active = true;
+
+    dma_disable_channel(DMA1, DMA_CHANNEL4);
+    dma_set_memory_address(
+        DMA1,
+        DMA_CHANNEL4,
+        (uint32_t)&g_tx_buffer[tail]);
+    dma_set_number_of_data(DMA1, DMA_CHANNEL4, length);
+    dma_enable_channel(DMA1, DMA_CHANNEL4);
+}
 
 static bool board_uart_tx_enqueue(uint8_t byte)
 {
@@ -32,14 +67,7 @@ static bool board_uart_tx_enqueue(uint8_t byte)
     }
 
     g_tx_buffer[head] = byte;
-
-    /*
-     * The main context is the only producer and USART1 ISR is the only
-     * consumer. Publish the byte by advancing head only after the data is
-     * stored, then ensure TXE interrupt is enabled.
-     */
     g_tx_head = next;
-    usart_enable_tx_interrupt(USART1);
     return true;
 }
 
@@ -47,6 +75,7 @@ void board_uart_init(uint32_t baudrate)
 {
     rcc_periph_clock_enable(RCC_GPIOA);
     rcc_periph_clock_enable(RCC_USART1);
+    rcc_periph_clock_enable(RCC_DMA1);
 
     gpio_set_mode(
         GPIOA,
@@ -62,7 +91,9 @@ void board_uart_init(uint32_t baudrate)
 
     g_tx_head = 0U;
     g_tx_tail = 0U;
+    g_tx_dma_length = 0U;
     g_tx_dropped_bytes = 0U;
+    g_tx_dma_active = false;
 
     usart_set_baudrate(USART1, baudrate);
     usart_set_databits(USART1, 8);
@@ -73,11 +104,26 @@ void board_uart_init(uint32_t baudrate)
     usart_enable(USART1);
 
     /*
-     * Keep UART transport below the real-time tick in interrupt priority.
-     * TXE remains disabled until the first byte is queued.
+     * STM32F103 USART1_TX is mapped to DMA1 Channel 4.
+     * One DMA interrupt is generated per contiguous buffer block instead of
+     * one USART TXE interrupt per transmitted byte.
      */
-    nvic_set_priority(NVIC_USART1_IRQ, 0xC0U);
-    nvic_enable_irq(NVIC_USART1_IRQ);
+    dma_channel_reset(DMA1, DMA_CHANNEL4);
+    dma_set_peripheral_address(
+        DMA1,
+        DMA_CHANNEL4,
+        (uint32_t)&USART_DR(USART1));
+    dma_set_read_from_memory(DMA1, DMA_CHANNEL4);
+    dma_enable_memory_increment_mode(DMA1, DMA_CHANNEL4);
+    dma_set_peripheral_size(DMA1, DMA_CHANNEL4, DMA_CCR_PSIZE_8BIT);
+    dma_set_memory_size(DMA1, DMA_CHANNEL4, DMA_CCR_MSIZE_8BIT);
+    dma_set_priority(DMA1, DMA_CHANNEL4, DMA_CCR_PL_LOW);
+    dma_enable_transfer_complete_interrupt(DMA1, DMA_CHANNEL4);
+
+    nvic_set_priority(NVIC_DMA1_CHANNEL4_IRQ, 0xC0U);
+    nvic_enable_irq(NVIC_DMA1_CHANNEL4_IRQ);
+
+    usart_enable_tx_dma(USART1);
 }
 
 void board_uart_write(const char *data, uint32_t length)
@@ -95,6 +141,8 @@ void board_uart_write(const char *data, uint32_t length)
 
         (void)board_uart_tx_enqueue((uint8_t)data[index]);
     }
+
+    board_uart_tx_dma_kick();
 }
 
 uint32_t board_uart_tx_dropped_bytes(void)
@@ -102,24 +150,21 @@ uint32_t board_uart_tx_dropped_bytes(void)
     return g_tx_dropped_bytes;
 }
 
-void usart1_isr(void)
+void dma1_channel4_isr(void)
 {
-    if (!usart_get_flag(USART1, USART_SR_TXE)) {
+    if ((DMA_ISR(DMA1) & DMA_ISR_TCIF4) == 0U) {
         return;
     }
 
-    if (g_tx_tail == g_tx_head) {
-        usart_disable_tx_interrupt(USART1);
-        return;
-    }
+    dma_clear_interrupt_flags(DMA1, DMA_CHANNEL4, DMA_TCIF);
+    dma_disable_channel(DMA1, DMA_CHANNEL4);
 
-    usart_send(USART1, g_tx_buffer[g_tx_tail]);
-    g_tx_tail =
-        (uint16_t)((g_tx_tail + 1U) & BOARD_UART_TX_BUFFER_MASK);
+    g_tx_tail = (uint16_t)(
+        (g_tx_tail + g_tx_dma_length) & BOARD_UART_TX_BUFFER_MASK);
+    g_tx_dma_length = 0U;
+    g_tx_dma_active = false;
 
-    if (g_tx_tail == g_tx_head) {
-        usart_disable_tx_interrupt(USART1);
-    }
+    board_uart_tx_dma_kick();
 }
 
 bool board_uart_try_read_char(char *character)
