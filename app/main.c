@@ -30,7 +30,7 @@
 #define LED_TOGGLE_TICKS               500U
 #define OLED_UI_REFRESH_TICKS          100U
 #define PERF_REPORT_TICKS             5000U
-#define OLED_FLUSH_BYTES_PER_TICK       32U
+#define OLED_BACKGROUND_FLUSH_BYTES      8U
 
 typedef struct {
     bool valid;
@@ -835,6 +835,7 @@ int main(void)
             }
 
             if (control_cycle_due && oled_ready) {
+                /* Only prepare framebuffer state inside the 1 kHz workload. */
                 ui_divider++;
 
                 if ((ui_divider >= OLED_UI_REFRESH_TICKS) &&
@@ -908,11 +909,6 @@ int main(void)
                     }
                     ui_divider = 0U;
                 }
-
-                /* Bound OLED traffic so UI work cannot become a full-frame burst. */
-                ssd1315_service(
-                    &oled,
-                    OLED_FLUSH_BYTES_PER_TICK);
             }
 
             if (control_cycle_due) {
@@ -995,12 +991,24 @@ int main(void)
                 (unsigned long)perf_report_missed);
             printf(
                 "[PERF_SUB] telem_avg_us=%lu telem_max_us=%lu "
-                "oled_avg_us=%lu oled_max_us=%lu\n",
+                "oled_fg_avg_us=%lu oled_fg_max_us=%lu\n",
                 (unsigned long)perf_report_telemetry_avg_us,
                 (unsigned long)perf_report_telemetry_max_us,
                 (unsigned long)perf_report_oled_avg_us,
                 (unsigned long)perf_report_oled_max_us);
             perf_report_due = false;
+        }
+
+        /*
+         * OLED transport is blocking software SPI. Service only after the
+         * real-time backlog has been drained, and keep each slice short so a
+         * newly arriving 1 ms tick is delayed by substantially less than one
+         * control period.
+         */
+        if (oled_ready) {
+            ssd1315_service(
+                &oled,
+                OLED_BACKGROUND_FLUSH_BYTES);
         }
 
         /*
