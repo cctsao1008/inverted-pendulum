@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define MOTOR_AUTHORITY_CONTROL_TIMEOUT_MS 5U
+
 typedef enum {
     MOTOR_AUTHORITY_NONE = 0,
     MOTOR_AUTHORITY_MAINTENANCE,
@@ -20,6 +22,9 @@ typedef struct {
     motor_authority_output_fn output;
     void *output_context;
     int8_t last_output_percent;
+    uint32_t control_last_update_ms;
+    bool control_enabled;
+    bool control_watchdog_started;
 } motor_authority_t;
 
 void motor_authority_init(
@@ -39,6 +44,22 @@ bool motor_authority_apply(
     motor_authority_t *authority,
     motor_authority_owner_t owner,
     int8_t signed_percent);
+
+bool motor_authority_set_control_enabled(
+    motor_authority_t *authority,
+    bool enabled);
+
+bool motor_authority_control_enabled(
+    const motor_authority_t *authority);
+
+bool motor_authority_control_command(
+    motor_authority_t *authority,
+    int8_t signed_percent,
+    uint32_t now_ms);
+
+bool motor_authority_update_1ms(
+    motor_authority_t *authority,
+    uint32_t now_ms);
 
 void motor_authority_enter_fault(motor_authority_t *authority);
 bool motor_authority_clear_fault(motor_authority_t *authority);

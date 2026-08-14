@@ -32,6 +32,9 @@ void motor_authority_init(
     authority->output = output;
     authority->output_context = output_context;
     authority->last_output_percent = 0;
+    authority->control_last_update_ms = 0U;
+    authority->control_enabled = false;
+    authority->control_watchdog_started = false;
 
     motor_authority_safe_off(authority);
 }
@@ -43,6 +46,10 @@ bool motor_authority_acquire(
     if ((authority == NULL) ||
         !motor_authority_is_active_owner(owner) ||
         (authority->owner == MOTOR_AUTHORITY_FAULT)) {
+        return false;
+    }
+
+    if (owner == MOTOR_AUTHORITY_CONTROL) {
         return false;
     }
 
@@ -66,6 +73,10 @@ void motor_authority_release(
 
     motor_authority_safe_off(authority);
     authority->owner = MOTOR_AUTHORITY_NONE;
+
+    if (owner == MOTOR_AUTHORITY_CONTROL) {
+        authority->control_watchdog_started = false;
+    }
 }
 
 bool motor_authority_apply(
@@ -74,7 +85,7 @@ bool motor_authority_apply(
     int8_t signed_percent)
 {
     if ((authority == NULL) ||
-        !motor_authority_is_active_owner(owner) ||
+        (owner != MOTOR_AUTHORITY_MAINTENANCE) ||
         (authority->owner != owner)) {
         return false;
     }
@@ -90,6 +101,97 @@ bool motor_authority_apply(
     return true;
 }
 
+
+bool motor_authority_set_control_enabled(
+    motor_authority_t *authority,
+    bool enabled)
+{
+    if ((authority == NULL) ||
+        (authority->owner == MOTOR_AUTHORITY_FAULT)) {
+        return false;
+    }
+
+    if (enabled) {
+        if (authority->owner == MOTOR_AUTHORITY_MAINTENANCE) {
+            return false;
+        }
+
+        authority->control_enabled = true;
+        return true;
+    }
+
+    authority->control_enabled = false;
+
+    if (authority->owner == MOTOR_AUTHORITY_CONTROL) {
+        motor_authority_safe_off(authority);
+        authority->owner = MOTOR_AUTHORITY_NONE;
+    }
+
+    authority->control_watchdog_started = false;
+    return true;
+}
+
+bool motor_authority_control_enabled(
+    const motor_authority_t *authority)
+{
+    return (authority != NULL) &&
+           authority->control_enabled;
+}
+
+bool motor_authority_control_command(
+    motor_authority_t *authority,
+    int8_t signed_percent,
+    uint32_t now_ms)
+{
+    if ((authority == NULL) ||
+        !authority->control_enabled ||
+        (authority->owner == MOTOR_AUTHORITY_FAULT) ||
+        (authority->owner == MOTOR_AUTHORITY_MAINTENANCE)) {
+        return false;
+    }
+
+    if (authority->owner == MOTOR_AUTHORITY_NONE) {
+        authority->owner = MOTOR_AUTHORITY_CONTROL;
+    }
+
+    if (authority->owner != MOTOR_AUTHORITY_CONTROL) {
+        return false;
+    }
+
+    authority->last_output_percent = signed_percent;
+    authority->control_last_update_ms = now_ms;
+    authority->control_watchdog_started = true;
+
+    if (authority->output != NULL) {
+        authority->output(
+            signed_percent,
+            authority->output_context);
+    }
+
+    return true;
+}
+
+bool motor_authority_update_1ms(
+    motor_authority_t *authority,
+    uint32_t now_ms)
+{
+    uint32_t age_ms;
+
+    if ((authority == NULL) ||
+        (authority->owner != MOTOR_AUTHORITY_CONTROL) ||
+        !authority->control_watchdog_started) {
+        return false;
+    }
+
+    age_ms = now_ms - authority->control_last_update_ms;
+    if (age_ms <= MOTOR_AUTHORITY_CONTROL_TIMEOUT_MS) {
+        return false;
+    }
+
+    motor_authority_enter_fault(authority);
+    return true;
+}
+
 void motor_authority_enter_fault(motor_authority_t *authority)
 {
     if (authority == NULL) {
@@ -97,6 +199,8 @@ void motor_authority_enter_fault(motor_authority_t *authority)
     }
 
     motor_authority_safe_off(authority);
+    authority->control_enabled = false;
+    authority->control_watchdog_started = false;
     authority->owner = MOTOR_AUTHORITY_FAULT;
 }
 
@@ -108,6 +212,8 @@ bool motor_authority_clear_fault(motor_authority_t *authority)
     }
 
     motor_authority_safe_off(authority);
+    authority->control_enabled = false;
+    authority->control_watchdog_started = false;
     authority->owner = MOTOR_AUTHORITY_NONE;
     return true;
 }
