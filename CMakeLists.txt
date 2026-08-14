@@ -6,6 +6,10 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
+set(FW_VERSION "0.1.0-dev"
+    CACHE STRING
+    "Firmware semantic version")
+
 option(BUILD_STM32_FIRMWARE
        "Build STM32F103 firmware"
        ON)

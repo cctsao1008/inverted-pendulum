@@ -7,6 +7,33 @@ set(LIBOPENCM3_LIBRARY
 set(LINKER_SCRIPT
     ${PLATFORM_DIR}/linker/stm32f103c8t6.ld)
 
+execute_process(
+    COMMAND
+        git -C ${PROJECT_SOURCE_DIR}
+        describe --always --dirty --abbrev=8
+    OUTPUT_VARIABLE FW_GIT_DESCRIBE
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(FW_GIT_DESCRIBE STREQUAL "")
+    set(FW_GIT_DESCRIBE "unknown")
+endif()
+
+string(
+    TIMESTAMP
+    FW_BUILD_UTC
+    "%Y-%m-%dT%H:%M:%SZ"
+    UTC
+)
+
+set(GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+file(MAKE_DIRECTORY ${GENERATED_DIR})
+configure_file(
+    ${PROJECT_SOURCE_DIR}/app/build_info.h.in
+    ${GENERATED_DIR}/build_info.h
+    @ONLY
+)
+
 find_program(HOST_MAKE_EXECUTABLE make REQUIRED)
 
 add_custom_target(libopencm3_stm32f1_build
@@ -51,6 +78,7 @@ add_dependencies(
 
 target_include_directories(${TARGET_NAME} PRIVATE
     ${PROJECT_SOURCE_DIR}/app
+    ${GENERATED_DIR}
     ${PROJECT_SOURCE_DIR}/drivers/ssd1315
     ${PLATFORM_DIR}/board
     ${LIBOPENCM3_DIR}/include

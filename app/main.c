@@ -13,6 +13,7 @@
 #include "board_profile.h"
 #include "board_time.h"
 #include "board_uart.h"
+#include "build_info.h"
 #include "command_service.h"
 #include "control_pipeline.h"
 #include "control_profile.h"
@@ -28,6 +29,7 @@
 #define CONTROL_FREQUENCY_HZ          1000U
 #define LED_TOGGLE_TICKS               500U
 #define OLED_UI_REFRESH_TICKS          100U
+#define PERF_REPORT_TICKS             5000U
 #define OLED_FLUSH_BYTES_PER_TICK       32U
 
 typedef struct {
@@ -232,9 +234,21 @@ int main(void)
     uint32_t telemetry_phase = 0U;
     uint32_t led_divider = 0U;
     uint32_t ui_divider = 0U;
+    uint32_t perf_ticks = 0U;
+    uint32_t perf_control_total_us = 0U;
+    uint32_t perf_control_max_us = 0U;
+    uint32_t perf_work_total_us = 0U;
+    uint32_t perf_work_max_us = 0U;
+    uint32_t perf_missed_base = 0U;
     uint32_t control_missed_cycles = 0U;
     bool control_runtime_ready;
     bool oled_ready;
+    bool perf_report_due = false;
+    uint32_t perf_report_control_avg_us = 0U;
+    uint32_t perf_report_control_max_us = 0U;
+    uint32_t perf_report_work_avg_us = 0U;
+    uint32_t perf_report_work_max_us = 0U;
+    uint32_t perf_report_missed = 0U;
     uint16_t last_control_upright_adc;
     int8_t last_control_pendulum_direction;
     int8_t last_characterize_percent = 0;
@@ -348,11 +362,21 @@ int main(void)
 
     printf("\n");
     printf("[BOOT] inverted-pendulum\n");
+    printf("[FW] version=%s git=%s\n",
+           FW_VERSION,
+           FW_GIT_DESCRIBE);
+    printf("[BUILD] utc=%s toolchain=gcc-%s\n",
+           FW_BUILD_UTC,
+           __VERSION__);
     printf("[MCU] STM32F103C8T6\n");
     printf("[CLK] system=%lu Hz\n",
            (unsigned long)board_clock_get_hz());
     printf("[LOOP] control=%lu Hz\n",
            (unsigned long)CONTROL_FREQUENCY_HZ);
+    printf(
+        "[PERF] window_ms=%lu metric=scheduled-work/1ms "
+        "idle-spin=excluded\n",
+        (unsigned long)PERF_REPORT_TICKS);
     printf("[ADC] PA7 ADC1_IN7; VBUS PA6 ADC1_IN6 divider=11:1\n");
     printf("[VBUS] nominal_mV=%lu calibration=required\n",
            (unsigned long)board_adc_read_vbus_millivolts());
@@ -427,9 +451,17 @@ int main(void)
             float pendulum_angle_rad;
             bool control_cycle_due;
             bool motor_test_completed;
+            uint32_t control_path_start_us = 0U;
+            uint32_t tick_work_start_us = 0U;
+            uint32_t control_path_us = 0U;
 
             last_tick++;
             control_cycle_due = (last_tick == current_tick);
+
+            if (control_cycle_due) {
+                tick_work_start_us = board_time_micros();
+                control_path_start_us = tick_work_start_us;
+            }
 
             board_profile_high();
 
@@ -475,6 +507,11 @@ int main(void)
             }
 
             board_profile_low();
+
+            if (control_cycle_due) {
+                control_path_us =
+                    board_time_micros() - control_path_start_us;
+            }
 
             motor_test_completed =
                 motor_test_service_update_1ms(&motor_test);
@@ -862,6 +899,55 @@ int main(void)
                 led_divider = 0U;
                 board_led_toggle();
             }
+
+            if (control_cycle_due) {
+                uint32_t tick_work_us =
+                    board_time_micros() - tick_work_start_us;
+
+                perf_ticks++;
+                perf_control_total_us += control_path_us;
+                perf_work_total_us += tick_work_us;
+
+                if (control_path_us > perf_control_max_us) {
+                    perf_control_max_us = control_path_us;
+                }
+                if (tick_work_us > perf_work_max_us) {
+                    perf_work_max_us = tick_work_us;
+                }
+
+                if (perf_ticks >= PERF_REPORT_TICKS) {
+                    perf_report_control_avg_us =
+                        perf_control_total_us / perf_ticks;
+                    perf_report_control_max_us = perf_control_max_us;
+                    perf_report_work_avg_us =
+                        perf_work_total_us / perf_ticks;
+                    perf_report_work_max_us = perf_work_max_us;
+                    perf_report_missed =
+                        control_missed_cycles - perf_missed_base;
+                    perf_missed_base = control_missed_cycles;
+                    perf_ticks = 0U;
+                    perf_control_total_us = 0U;
+                    perf_control_max_us = 0U;
+                    perf_work_total_us = 0U;
+                    perf_work_max_us = 0U;
+                    perf_report_due = true;
+                }
+            }
+        }
+
+        if (perf_report_due) {
+            printf(
+                "[PERF] ctrl_avg_us=%lu ctrl_max_us=%lu "
+                "work_avg_us=%lu work_max_us=%lu "
+                "cpu_sched_pct=%lu.%lu missed=%lu\n",
+                (unsigned long)perf_report_control_avg_us,
+                (unsigned long)perf_report_control_max_us,
+                (unsigned long)perf_report_work_avg_us,
+                (unsigned long)perf_report_work_max_us,
+                (unsigned long)(perf_report_work_avg_us / 10U),
+                (unsigned long)(perf_report_work_avg_us % 10U),
+                (unsigned long)perf_report_missed);
+            perf_report_due = false;
         }
 
         /*
