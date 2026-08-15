@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <float.h>
 
 #include "control_profile.h"
 
@@ -26,6 +27,13 @@ int main(void)
     assert(profile.runtime.telemetry_enabled);
     assert(!profile.runtime.swing_up_enabled);
     assert(!profile.runtime.capture_enabled);
+
+    assert(profile.state_safety.configured);
+    assert(profile.state_safety.max_sample_age_us == 0U);
+    assert(profile.state_safety.max_abs_pendulum_angle_rad == FLT_MAX);
+    assert(profile.state_safety.max_abs_arm_angle_rad == FLT_MAX);
+    assert(profile.state_safety.max_abs_pendulum_rate_rad_s == FLT_MAX);
+    assert(profile.state_safety.max_abs_arm_rate_rad_s == FLT_MAX);
 
     return 0;
 }

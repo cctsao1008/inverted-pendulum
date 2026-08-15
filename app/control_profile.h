@@ -3,10 +3,12 @@
 
 #include "control_config.h"
 #include "control_runtime.h"
+#include "state_safety.h"
 
 typedef struct {
     control_config_t control;
     control_runtime_config_t runtime;
+    state_safety_limits_t state_safety;
 } app_control_profile_t;
 
 void app_control_profile_init_observe_only(
