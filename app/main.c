@@ -16,6 +16,7 @@
 #include "build_info.h"
 #include "closed_loop_enable_gate.h"
 #include "closed_loop_gate_runtime.h"
+#include "closed_loop_mode_manager.h"
 #include "command_service.h"
 #include "control_pipeline.h"
 #include "control_profile.h"
@@ -686,6 +687,12 @@ int main(void)
                 parameters.pendulum_upright_adc,
                 parameters.pendulum_direction);
 
+            if (control_cycle_due) {
+                app_closed_loop_mode_prepare(
+                    &control_pipeline,
+                    parameters.control_enable_request);
+            }
+
             if (control_cycle_due && control_runtime_ready) {
                 uint16_t vbus_raw = board_adc_read_vbus_raw();
 
@@ -727,6 +734,10 @@ int main(void)
                         control_runtime_ready,
                         &control_pipeline,
                         motor_authority_owner(&motor_authority));
+                app_closed_loop_mode_apply_gate(
+                    &control_pipeline,
+                    parameters.control_enable_request,
+                    &closed_loop_gate_result);
             }
 
             board_profile_low();
