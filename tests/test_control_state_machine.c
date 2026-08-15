@@ -35,6 +35,19 @@ int main(void)
     assert(!control_state_machine_mode_is_active(
         CONTROL_MODE_FAULT));
 
+    assert(!control_state_machine_mode_is_admission_ready(
+        CONTROL_MODE_DISABLED));
+    assert(control_state_machine_mode_is_admission_ready(
+        CONTROL_MODE_IDLE));
+    assert(control_state_machine_mode_is_admission_ready(
+        CONTROL_MODE_SWING_UP));
+    assert(control_state_machine_mode_is_admission_ready(
+        CONTROL_MODE_CAPTURE));
+    assert(control_state_machine_mode_is_admission_ready(
+        CONTROL_MODE_BALANCE));
+    assert(!control_state_machine_mode_is_admission_ready(
+        CONTROL_MODE_FAULT));
+
     control_state_machine_init(&machine);
     assert(control_state_machine_get_mode(&machine) ==
         CONTROL_MODE_DISABLED);

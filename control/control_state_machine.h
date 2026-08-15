@@ -36,4 +36,7 @@ control_mode_t control_state_machine_get_mode(
 bool control_state_machine_mode_is_active(
     control_mode_t mode);
 
+bool control_state_machine_mode_is_admission_ready(
+    control_mode_t mode);
+
 #endif

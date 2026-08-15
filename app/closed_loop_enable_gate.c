@@ -61,7 +61,12 @@ closed_loop_gate_result_t closed_loop_gate_evaluate(
         result.reject_flags |= CLOSED_LOOP_GATE_REJECT_RUNTIME;
     }
 
-    if (!control_state_machine_mode_is_active(
+    /*
+     * IDLE is the intentional pre-active admission state.  DISABLED and
+     * FAULT remain fail-closed, while active modes remain admissible for the
+     * later run-permit phase.
+     */
+    if (!control_state_machine_mode_is_admission_ready(
             input->control_mode)) {
         result.reject_flags |= CLOSED_LOOP_GATE_REJECT_MODE;
     }

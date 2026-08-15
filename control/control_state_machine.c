@@ -173,3 +173,10 @@ bool control_state_machine_mode_is_active(
            (mode == CONTROL_MODE_CAPTURE) ||
            (mode == CONTROL_MODE_BALANCE);
 }
+
+bool control_state_machine_mode_is_admission_ready(
+    control_mode_t mode)
+{
+    return (mode == CONTROL_MODE_IDLE) ||
+           control_state_machine_mode_is_active(mode);
+}

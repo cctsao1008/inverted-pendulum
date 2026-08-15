@@ -56,6 +56,12 @@ int main(void)
 
     input.control_mode = CONTROL_MODE_IDLE;
     result = closed_loop_gate_evaluate(&config, &input);
+    assert(result.allowed);
+    assert(result.reject_flags == CLOSED_LOOP_GATE_OK);
+    input = valid_input();
+
+    input.control_mode = CONTROL_MODE_DISABLED;
+    result = closed_loop_gate_evaluate(&config, &input);
     assert((result.reject_flags &
             CLOSED_LOOP_GATE_REJECT_MODE) != 0U);
     input = valid_input();
