@@ -1,0 +1,3 @@
+# Clear closed-loop admission request.
+param set control.enable_request 0
+param get control.enable_request

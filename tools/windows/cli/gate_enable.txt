@@ -1,0 +1,3 @@
+# Request closed-loop admission. Observe-only until the motor sink is explicitly bound.
+param set control.enable_request 1
+param get control.enable_request
