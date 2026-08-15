@@ -518,7 +518,10 @@ int main(void)
             &control_profile.control) &&
         control_pipeline_set_runtime_config(
             &control_pipeline,
-            &control_profile.runtime);
+            &control_profile.runtime) &&
+        control_pipeline_set_state_safety_limits(
+            &control_pipeline,
+            &control_profile.state_safety);
 
     control_pipeline_set_sensor_source(
         &control_pipeline,
@@ -645,12 +648,6 @@ int main(void)
             }
         }
 
-        /*
-         * Drain every tick that existed before accepting a new command. This
-         * preserves maintenance-service timing, but the control pipeline runs
-         * only for the newest real sample. Historical control cycles are
-         * recorded as missed rather than replayed back-to-back.
-         */
         while (last_tick != current_tick) {
             uint32_t timestamp_us;
             uint16_t adc_raw;
@@ -685,10 +682,6 @@ int main(void)
             if (control_cycle_due && control_runtime_ready) {
                 uint16_t vbus_raw = board_adc_read_vbus_raw();
 
-                /*
-                 * Calibration changes redefine theta. Re-seed estimator
-                 * history before the first sample in the new coordinate.
-                 */
                 if ((parameters.pendulum_upright_adc !=
                      last_control_upright_adc) ||
                     (parameters.pendulum_direction !=
@@ -749,200 +742,6 @@ int main(void)
 
             motor_test_completed =
                 motor_test_service_update_1ms(&motor_test);
-
-            {
-                motor_characterize_state_t state =
-                    motor_test_service_characterize_state(&motor_test);
-                int8_t percent = motor_test_service_percent(&motor_test);
-
-                if (((state == MOTOR_CHARACTERIZE_RAMP_UP) ||
-                     (state == MOTOR_CHARACTERIZE_CONFIRM) ||
-                     (state == MOTOR_CHARACTERIZE_RAMP_DOWN)) &&
-                    ((state != last_characterize_state) ||
-                     (percent != last_characterize_percent))) {
-                    printf("[MOTOR] characterize phase=%s output_pct=%d\n",
-                           characterize_phase_name(state),
-                           (int)percent);
-                }
-                last_characterize_state = state;
-                last_characterize_percent = percent;
-            }
-
-            if (motor_test_completed) {
-                motor_identify_state_t identify_state =
-                    motor_test_service_identify_state(&motor_test);
-                motor_characterize_state_t characterize_state =
-                    motor_test_service_characterize_state(&motor_test);
-                motor_response_state_t response_state =
-                    motor_test_service_response_state(&motor_test);
-                motor_brake_state_t brake_state = motor_test_service_brake_state(&motor_test);
-
-                if ((brake_state == MOTOR_BRAKE_DONE) ||
-                    (brake_state == MOTOR_BRAKE_REVERSAL)) {
-                    const char *stop_reason =
-                        brake_state == MOTOR_BRAKE_DONE ? "stable" : "reversal";
-                    const char *direction =
-                        motor_test_service_brake_direction(&motor_test) > 0
-                            ? "right" : "left";
-                    int brake_drive_pct =
-                        (int)motor_test_service_brake_drive_percent(&motor_test);
-                    unsigned long brake_drive_ms =
-                        (unsigned long)motor_test_service_brake_drive_ms(&motor_test);
-                    int brake_pct =
-                        (int)motor_test_service_brake_percent(&motor_test);
-                    long drive_delta =
-                        (long)motor_test_service_brake_drive_delta(&motor_test);
-                    long cutoff_velocity =
-                        (long)motor_test_service_brake_cutoff_velocity_counts_s(&motor_test);
-                    long neutral_delta =
-                        (long)motor_test_service_brake_neutral_delta(&motor_test);
-                    long entry_velocity =
-                        (long)motor_test_service_brake_entry_velocity_counts_s(&motor_test);
-                    unsigned long brake_time_ms =
-                        (unsigned long)motor_test_service_brake_time_ms(&motor_test);
-                    long braking_delta =
-                        (long)motor_test_service_brake_delta(&motor_test);
-                    long release_velocity =
-                        (long)motor_test_service_brake_release_velocity_counts_s(&motor_test);
-                    long settling_delta =
-                        (long)motor_test_service_brake_settle_delta(&motor_test);
-                    long final_velocity =
-                        (long)motor_test_service_brake_final_velocity_counts_s(&motor_test);
-                    long peak_velocity =
-                        (long)motor_test_service_brake_peak_velocity_counts_s(&motor_test);
-                    unsigned long vbus_mV =
-                        (unsigned long)board_adc_read_vbus_millivolts();
-
-                    printf("[MOTOR] brake-response complete stop_reason=%s direction=%s drive_pct=%d drive_ms=%lu brake_pct=%d drive_delta=%ld cutoff_velocity_counts_s=%ld neutral_delta=%ld brake_entry_velocity_counts_s=%ld brake_time_ms=%lu braking_delta=%ld release_velocity_counts_s=%ld settling_delta=%ld final_velocity_counts_s=%ld peak_velocity_counts_s=%ld output_pct=0 armed=0 vbus_mV=%lu\n",
-                           stop_reason, direction, brake_drive_pct,
-                           brake_drive_ms, brake_pct, drive_delta,
-                           cutoff_velocity, neutral_delta, entry_velocity,
-                           brake_time_ms, braking_delta, release_velocity,
-                           settling_delta, final_velocity, peak_velocity,
-                           vbus_mV);
-                    printf("[MOTOR_CSV] brake_response,%s,%s,%d,%lu,%d,%ld,%ld,%ld,%ld,%lu,%ld,%ld,%ld,%ld,%ld,%lu\n",
-                           stop_reason, direction, brake_drive_pct,
-                           brake_drive_ms, brake_pct, drive_delta,
-                           cutoff_velocity, neutral_delta, entry_velocity,
-                           brake_time_ms, braking_delta, release_velocity,
-                           settling_delta, final_velocity, peak_velocity,
-                           vbus_mV);
-                } else if ((brake_state == MOTOR_BRAKE_NO_MOTION) || (brake_state == MOTOR_BRAKE_ENCODER_IMPLAUSIBLE) || (brake_state == MOTOR_BRAKE_TIMEOUT)) {
-                    const char *reason = brake_state == MOTOR_BRAKE_NO_MOTION ? "no-motion" : (brake_state == MOTOR_BRAKE_TIMEOUT ? "brake-timeout" : "encoder-implausible");
-                    printf("[MOTOR] brake-response failed reason=%s direction=%s brake_pct=%d drive_delta=%ld braking_delta=%ld output_pct=0 armed=0 vbus_mV=%lu\n", reason,
-                           motor_test_service_brake_direction(&motor_test) > 0 ? "right" : "left",
-                           (int)motor_test_service_brake_percent(&motor_test),
-                           (long)motor_test_service_brake_drive_delta(&motor_test),
-                           (long)motor_test_service_brake_delta(&motor_test),
-                           (unsigned long)board_adc_read_vbus_millivolts());
-                } else if (response_state == MOTOR_RESPONSE_DONE) {
-                    printf("[MOTOR] response complete direction=%s "
-                           "output_pct=%d drive_ms=%lu drive_delta=%ld "
-                           "cutoff_velocity_counts_s=%ld "
-                           "stop_time_ms=%lu coast_delta=%ld "
-                           "peak_velocity_counts_s=%ld output_pct=0 "
-                           "armed=0 vbus_mV=%lu\n",
-                           motor_test_service_response_direction(&motor_test) > 0
-                               ? "right" : "left",
-                           (int)motor_test_service_response_percent(&motor_test),
-                           (unsigned long)motor_test_service_response_drive_ms(&motor_test),
-                           (long)motor_test_service_response_drive_delta(&motor_test),
-                           (long)motor_test_service_response_cutoff_velocity_counts_s(&motor_test),
-                           (unsigned long)motor_test_service_response_stop_ms(&motor_test),
-                           (long)motor_test_service_response_coast_delta(&motor_test),
-                           (long)motor_test_service_response_peak_velocity_counts_s(&motor_test),
-                           (unsigned long)board_adc_read_vbus_millivolts());
-                } else if ((response_state == MOTOR_RESPONSE_NO_MOTION) ||
-                           (response_state == MOTOR_RESPONSE_ENCODER_IMPLAUSIBLE) ||
-                           (response_state == MOTOR_RESPONSE_COAST_TIMEOUT)) {
-                    const char *reason = "coast-timeout";
-                    if (response_state == MOTOR_RESPONSE_NO_MOTION) {
-                        reason = "no-motion";
-                    } else if (response_state ==
-                               MOTOR_RESPONSE_ENCODER_IMPLAUSIBLE) {
-                        reason = "encoder-implausible";
-                    }
-                    printf("[MOTOR] response failed reason=%s direction=%s "
-                           "output_pct=%d drive_delta=%ld coast_delta=%ld "
-                           "peak_velocity_counts_s=%ld output_pct=0 armed=0 "
-                           "vbus_mV=%lu\n",
-                           reason,
-                           motor_test_service_response_direction(&motor_test) > 0
-                               ? "right" : "left",
-                           (int)motor_test_service_response_percent(&motor_test),
-                           (long)motor_test_service_response_drive_delta(&motor_test),
-                           (long)motor_test_service_response_coast_delta(&motor_test),
-                           (long)motor_test_service_response_peak_velocity_counts_s(&motor_test),
-                           (unsigned long)board_adc_read_vbus_millivolts());
-                } else if (characterize_state == MOTOR_CHARACTERIZE_DONE) {
-                    printf("[MOTOR] characterize complete direction=%s "
-                           "encoder_sign=%d breakaway_pct=%d "
-                           "breakaway_velocity_counts_s=%ld "
-                           "minimum_sustain_pct=%d dropout_pct=%d "
-                           "peak_velocity_counts_s=%ld output_pct=0 "
-                           "armed=0 vbus_mV=%lu\n",
-                           motor_test_service_characterize_direction(
-                               &motor_test) > 0 ? "right" : "left",
-                           (int)motor_test_service_characterize_encoder_sign(
-                               &motor_test),
-                           (int)motor_test_service_characterize_breakaway_percent(
-                               &motor_test),
-                           (long)motor_test_service_characterize_breakaway_velocity_counts_s(
-                               &motor_test),
-                           (int)motor_test_service_characterize_minimum_sustain_percent(
-                               &motor_test),
-                           (int)motor_test_service_characterize_dropout_percent(
-                               &motor_test),
-                           (long)motor_test_service_characterize_peak_velocity_counts_s(
-                               &motor_test),
-                           (unsigned long)board_adc_read_vbus_millivolts());
-                } else if ((characterize_state ==
-                            MOTOR_CHARACTERIZE_NO_MOTION) ||
-                           (characterize_state ==
-                            MOTOR_CHARACTERIZE_WRONG_DIRECTION) ||
-                           (characterize_state ==
-                            MOTOR_CHARACTERIZE_ENCODER_IMPLAUSIBLE) ||
-                           (characterize_state ==
-                            MOTOR_CHARACTERIZE_TIMEOUT)) {
-                    const char *reason = "timeout";
-
-                    if (characterize_state ==
-                        MOTOR_CHARACTERIZE_NO_MOTION) {
-                        reason = "no-motion-or-unstable";
-                    } else if (characterize_state ==
-                               MOTOR_CHARACTERIZE_WRONG_DIRECTION) {
-                        reason = "direction-reversal";
-                    } else if (characterize_state ==
-                               MOTOR_CHARACTERIZE_ENCODER_IMPLAUSIBLE) {
-                        reason = "encoder-implausible";
-                    }
-                    printf("[MOTOR] characterize failed reason=%s "
-                           "direction=%s peak_velocity_counts_s=%ld "
-                           "output_pct=0 armed=0 vbus_mV=%lu\n",
-                           reason,
-                           motor_test_service_characterize_direction(
-                               &motor_test) > 0 ? "right" : "left",
-                           (long)motor_test_service_characterize_peak_velocity_counts_s(
-                               &motor_test),
-                           (unsigned long)board_adc_read_vbus_millivolts());
-                } else if (identify_state == MOTOR_IDENTIFY_DONE) {
-                    printf("[MOTOR] identify complete encoder_delta=%ld "
-                           "motor_encoder_sign=%d peak_velocity_counts_s=%ld "
-                           "output_pct=0 armed=0 vbus_mV=%lu\n",
-                           (long)motor_test_service_identify_delta(&motor_test),
-                           (int)motor_test_service_identify_sign(&motor_test),
-                           (long)motor_test_service_identify_peak_velocity_counts_s(&motor_test),
-                           (unsigned long)board_adc_read_vbus_millivolts());
-                } else if (identify_state == MOTOR_IDENTIFY_NO_MOTION) {
-                    printf("[MOTOR] identify failed reason=no-motion "
-                           "encoder_delta=%ld output_pct=0 armed=0 vbus_mV=%lu\n",
-                           (long)motor_test_service_identify_delta(&motor_test),
-                           (unsigned long)board_adc_read_vbus_millivolts());
-                } else {
-                    printf("[MOTOR] operation complete output_pct=0 armed=0 vbus_mV=%lu\n",
-                           (unsigned long)board_adc_read_vbus_millivolts());
-                }
-            }
 
             command_service_update_1ms(&command_service);
 
@@ -1059,7 +858,6 @@ int main(void)
             }
 
             if (control_cycle_due && oled_ready) {
-                /* Only prepare framebuffer state inside the 1 kHz workload. */
                 ui_divider++;
 
                 if ((ui_divider >= OLED_UI_REFRESH_TICKS) &&
@@ -1223,33 +1021,17 @@ int main(void)
             perf_report_due = false;
         }
 
-        /*
-         * OLED transport is blocking software SPI. Service only after the
-         * real-time backlog has been drained, and keep each slice short so a
-         * newly arriving 1 ms tick is delayed by substantially less than one
-         * control period.
-         */
         if (oled_ready) {
             ssd1315_service(
                 &oled,
                 OLED_BACKGROUND_FLUSH_BYTES);
         }
 
-        /*
-         * Formatting is intentionally outside the 1 kHz scheduled workload.
-         * The UART driver only enqueues the resulting bytes and DMA performs
-         * the physical transmission.
-         */
         if (telemetry_report.pending) {
             telemetry_report.pending = false;
             telemetry_write_report(&telemetry_report);
         }
 
-        /*
-         * CLI writes are blocking.  Handle them only after the real-time tick
-         * backlog above has been drained.  A newly requested motor output is
-         * applied immediately by motor_test_service_start().
-         */
         while (board_uart_try_read_char(&received_character)) {
             command_service_feed_char(
                 &command_service,
