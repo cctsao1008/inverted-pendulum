@@ -176,6 +176,48 @@ static void test_safe_defaults_fail_closed(void)
     assert(probe.safe_off_count >= 2U);
 }
 
+static void test_runtime_status_is_independent_of_trace(void)
+{
+    control_pipeline_t pipeline;
+    control_pipeline_status_t status;
+    sensor_probe_t sensor = {0U, true};
+    motor_probe_t motor = {0};
+
+    configure_pipeline(
+        &pipeline,
+        &sensor,
+        &motor,
+        true,
+        false);
+
+    assert(!control_pipeline_get_status(
+        &pipeline,
+        &status));
+
+    control_pipeline_step(&pipeline);
+
+    assert(control_pipeline_get_status(
+        &pipeline,
+        &status));
+    assert(status.valid);
+    assert(status.sensor.timestamp_us == 1000U);
+    assert(status.sensor.valid);
+    assert(status.control_mode == CONTROL_MODE_DISABLED);
+    assert(!status.control_allowed);
+    assert((status.state_safety_flags &
+            STATE_SAFETY_FAULT_ESTIMATE_NOT_READY) != 0U);
+
+    control_pipeline_step(&pipeline);
+
+    assert(control_pipeline_get_status(
+        &pipeline,
+        &status));
+    assert(status.sensor.timestamp_us == 2000U);
+    assert(status.control_mode == CONTROL_MODE_DISABLED);
+    assert(status.state_safety_flags == 0U);
+    assert(status.control_allowed);
+}
+
 static void test_motor_authority_requires_all_gates(void)
 {
     control_pipeline_t pipeline;
@@ -291,6 +333,7 @@ static void test_missing_control_config_never_grants_authority(void)
 int main(void)
 {
     test_safe_defaults_fail_closed();
+    test_runtime_status_is_independent_of_trace();
     test_motor_authority_requires_all_gates();
     test_sensor_fault_propagates_to_safe_off();
     test_missing_control_config_never_grants_authority();

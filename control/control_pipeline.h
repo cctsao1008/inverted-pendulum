@@ -16,6 +16,15 @@
 #include "state_safety.h"
 
 typedef struct {
+    bool valid;
+    sensor_data_t sensor;
+    control_state_t state;
+    control_mode_t control_mode;
+    uint32_t state_safety_flags;
+    bool control_allowed;
+} control_pipeline_status_t;
+
+typedef struct {
     bool initialized;
     bool control_config_present;
 
@@ -32,6 +41,7 @@ typedef struct {
 
     motor_output_t motor_output;
     control_trace_t trace;
+    control_pipeline_status_t status;
 } control_pipeline_t;
 
 void control_pipeline_init(
@@ -78,6 +88,10 @@ void control_pipeline_request_fault_clear(
 
 control_mode_t control_pipeline_get_mode(
     const control_pipeline_t *pipeline);
+
+bool control_pipeline_get_status(
+    const control_pipeline_t *pipeline,
+    control_pipeline_status_t *status);
 
 void control_pipeline_step(
     control_pipeline_t *pipeline);

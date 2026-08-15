@@ -40,6 +40,9 @@ void control_pipeline_init(
     control_trace_init(
         &pipeline->trace);
 
+    pipeline->status = (control_pipeline_status_t){0};
+    pipeline->status.control_mode = CONTROL_MODE_DISABLED;
+
     pipeline->initialized = true;
 }
 
@@ -61,6 +64,8 @@ bool control_pipeline_set_control_config(
      */
     estimator_dispatch_init(
         &pipeline->estimator_dispatch);
+
+    pipeline->status.valid = false;
 
     return true;
 }
@@ -84,6 +89,8 @@ bool control_pipeline_set_runtime_config(
     lqi_controller_init(
         &pipeline->lqi_controller);
 
+    pipeline->status.valid = false;
+
     if (!pipeline->runtime_config.motor_output_enabled) {
         motor_output_safe_off(
             &pipeline->motor_output);
@@ -102,6 +109,7 @@ bool control_pipeline_set_state_safety_limits(
     }
 
     pipeline->state_safety_limits = *limits;
+    pipeline->status.valid = false;
     return true;
 }
 
@@ -131,6 +139,8 @@ void control_pipeline_set_sensor_source(
         &pipeline->sensor_acquisition,
         read,
         context);
+
+    pipeline->status.valid = false;
 }
 
 void control_pipeline_set_motor_output(
@@ -206,6 +216,21 @@ control_mode_t control_pipeline_get_mode(
         &pipeline->state_machine);
 }
 
+bool control_pipeline_get_status(
+    const control_pipeline_t *pipeline,
+    control_pipeline_status_t *status)
+{
+    if ((pipeline == 0) ||
+        (status == 0) ||
+        !pipeline->initialized ||
+        !pipeline->status.valid) {
+        return false;
+    }
+
+    *status = pipeline->status;
+    return true;
+}
+
 void control_pipeline_step(
     control_pipeline_t *pipeline)
 {
@@ -263,6 +288,17 @@ void control_pipeline_step(
     lqi_controller_sync_mode(
         &pipeline->lqi_controller,
         mode);
+
+    /*
+     * Keep the latest safety/runtime status independent of optional trace
+     * delivery. Admission and safety decisions must not depend on telemetry.
+     */
+    pipeline->status.sensor = sensor;
+    pipeline->status.state = state;
+    pipeline->status.control_mode = mode;
+    pipeline->status.state_safety_flags = state_safety.fault_flags;
+    pipeline->status.control_allowed = state_safety.control_allowed;
+    pipeline->status.valid = true;
 
     /* 5. Selected Controller */
     control = controller_dispatch(
