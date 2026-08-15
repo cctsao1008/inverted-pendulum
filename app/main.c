@@ -518,7 +518,10 @@ int main(void)
             &control_profile.control) &&
         control_pipeline_set_runtime_config(
             &control_pipeline,
-            &control_profile.runtime);
+            &control_profile.runtime) &&
+        control_pipeline_set_state_safety_limits(
+            &control_pipeline,
+            &control_profile.state_safety);
 
     control_pipeline_set_sensor_source(
         &control_pipeline,
