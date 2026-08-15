@@ -48,6 +48,7 @@ add_custom_target(libopencm3_stm32f1_build
 
 add_executable(${TARGET_NAME}
     ${PROJECT_SOURCE_DIR}/app/closed_loop_enable_gate.c
+    ${PROJECT_SOURCE_DIR}/app/closed_loop_gate_runtime.c
     ${PROJECT_SOURCE_DIR}/app/command_service.c
     ${PROJECT_SOURCE_DIR}/app/control_profile.c
     ${PROJECT_SOURCE_DIR}/app/control_sensor_adapter.c
