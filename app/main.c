@@ -15,6 +15,7 @@
 #include "board_uart.h"
 #include "build_info.h"
 #include "closed_loop_enable_gate.h"
+#include "closed_loop_gate_runtime.h"
 #include "command_service.h"
 #include "control_pipeline.h"
 #include "control_profile.h"
@@ -716,27 +717,16 @@ int main(void)
                     parameters.pendulum_upright_adc,
                     parameters.pendulum_direction);
                 control_pipeline_step(&control_pipeline);
+            }
 
-                if (control_trace_capture.valid) {
-                    const control_trace_record_t *record =
-                        &control_trace_capture.latest;
-                    closed_loop_gate_input_t gate_input = {
+            if (control_cycle_due) {
+                closed_loop_gate_result =
+                    app_closed_loop_gate_evaluate(
+                        &closed_loop_gate_config,
                         parameters.control_enable_request,
                         control_runtime_ready,
-                        record->control_mode,
-                        record->control_allowed,
-                        record->sensor.sample_age_us,
-                        (int32_t)(
-                            record->state.pendulum_angle_rad *
-                            1000.0F),
-                        motor_authority_owner(&motor_authority)
-                    };
-
-                    closed_loop_gate_result =
-                        closed_loop_gate_evaluate(
-                            &closed_loop_gate_config,
-                            &gate_input);
-                }
+                        &control_pipeline,
+                        motor_authority_owner(&motor_authority));
             }
 
             board_profile_low();
