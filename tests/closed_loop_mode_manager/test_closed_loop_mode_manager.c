@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stddef.h>
 
 #include "closed_loop_mode_manager.h"
 
