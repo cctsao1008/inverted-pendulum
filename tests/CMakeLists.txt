@@ -516,3 +516,31 @@ add_test(
     NAME closed_loop_enable_gate
     COMMAND test_closed_loop_enable_gate
 )
+
+add_executable(test_closed_loop_gate_runtime
+    test_closed_loop_gate_runtime.c
+    ${PROJECT_SOURCE_DIR}/app/closed_loop_enable_gate.c
+    ${PROJECT_SOURCE_DIR}/app/closed_loop_gate_runtime.c
+    ${PROJECT_SOURCE_DIR}/app/motor_authority.c
+)
+
+target_include_directories(test_closed_loop_gate_runtime PRIVATE
+    ${PROJECT_SOURCE_DIR}/app
+    ${PROJECT_SOURCE_DIR}/control
+)
+
+target_link_libraries(test_closed_loop_gate_runtime PRIVATE
+    control_core
+)
+
+target_compile_options(test_closed_loop_gate_runtime PRIVATE
+    -Wall
+    -Wextra
+    -Wshadow
+    -Wundef
+)
+
+add_test(
+    NAME closed_loop_gate_runtime
+    COMMAND test_closed_loop_gate_runtime
+)
