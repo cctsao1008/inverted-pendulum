@@ -2,7 +2,9 @@
 
 ## 1. Purpose
 
-This document defines the target control architecture for the rotary inverted pendulum firmware.
+This document defines the target and current control architecture for the **rotary inverted pendulum** firmware.
+
+The physical plant is the Forest S1 / Forest D1 rotary inverted-pendulum mechanism. The architecture described here is not a flight-control architecture: the controlled coordinates are the pendulum angle/rate and rotary-arm position/rate, and the actuator is the rotary-arm motor.
 
 The architecture is designed before all control functions are fully implemented. The key objective is to establish a complete, buildable, fail-safe topology with stable module boundaries. Individual algorithms may initially be implemented as safe stubs and replaced incrementally without restructuring the critical control path.
 
@@ -19,6 +21,9 @@ The architecture must support, at minimum:
 - Actuator mapping
 - Output safety and saturation
 - TB6612 motor drive
+- Closed-loop admission and continuous run-permit safety
+- Explicit physical motor-authority arbitration
+- Stale-output watchdog and emergency-stop integration
 - Telemetry and trace infrastructure
 - Replaceable control-math backends, including CMSIS-DSP
 - Future estimator extensions such as Kalman filtering
@@ -33,6 +38,9 @@ The architecture must support, at minimum:
 4. **Non-critical modules must be easy to replace, extend, and disable.**
 5. **Algorithm implementations must remain separated from architecture boundaries.**
 6. **Every supported configuration must remain buildable, linkable, and fail-safe.**
+7. **Controller-selection authority and physical actuator authority are separate responsibilities.**
+8. **Historical/legacy system validity must not be silently promoted into current implementation validity.**
+9. **Source-file existence is not equivalent to runtime validation or physical commissioning.**
 
 A complete architecture does not imply that every module must be fully implemented immediately. A module may initially use a safe/default implementation as long as its interface, position in the topology, build dependency, and failure behavior are already valid.
 
@@ -45,13 +53,16 @@ A complete architecture does not imply that every module must be fully implement
 | **Critical Path Module** | Yes | Yes | No* | State Estimator, State Safety, Control State Machine, Actuator Mapper, Output Safety, Motor Driver |
 | **Interchangeable Algorithm** | Yes | Yes | Individual implementation may be disabled | LQR, LQI, Basic Estimator, Kalman Estimator |
 | **Conditional Control Module** | Yes | Yes | Yes / bypass | Energy Swing-up, Capture |
+| **System Safety / Authority Module** | Yes | Yes | No when physical automatic control is enabled | Admission Gate, Run Permit, Motor Authority Arbiter, Watchdog, E-stop |
 | **Supporting Module** | Yes | Yes | Yes | Telemetry, Trace, CMSIS-DSP acceleration, statistics, debug instrumentation |
 
-> **Note:** A critical module must always have a valid implementation. While a safe/default implementation may be used before the full implementation is ready, pass-through behavior is only acceptable when it is semantically safe. Safety-related modules should fail closed rather than silently bypass protection. The topology itself must not be removed.
+> **Note:** A critical or system-safety module must always have a valid implementation when its dependent path is enabled. While a safe/default implementation may be used before the full implementation is ready, pass-through behavior is only acceptable when it is semantically safe. Safety-related modules should fail closed rather than silently bypass protection. The topology itself must not be removed.
 
 ---
 
 ## 4. Target Runtime Architecture
+
+### 4.1 Control-computation architecture
 
 ```mermaid
 flowchart TD
@@ -65,8 +76,8 @@ flowchart TD
     BAL["Balance Controller\nLQR / LQI"]
 
     AM["Actuator Mapping\nu -> PWM / Direction / Brake / Coast"]
-    OS["Output Safety & Saturation\nPWM / Slew / Reversal / Hard Limits"]
-    DRV["TB6612 Driver"]
+    OS["Output Safety & Saturation\nMagnitude / Slew / Reversal / Hard Limits"]
+    CMD["Computed Actuator Command"]
 
     TRACE["Telemetry / Trace\nMOTOR_TRACE / CONTROL_TRACE"]
     MATH["Control Math Backend\nScalar C / CMSIS-DSP F32 / CMSIS-DSP Q31"]
@@ -84,7 +95,7 @@ flowchart TD
     BAL --> AM
 
     AM --> OS
-    OS --> DRV
+    OS --> CMD
 
     SA -.-> TRACE
     SE -.-> TRACE
@@ -100,13 +111,94 @@ flowchart TD
     MATH -.-> BAL
 ```
 
-The topology is fixed at the architectural level. Which algorithms are active at runtime is configuration-dependent.
+This diagram answers **how a control command is computed**. It deliberately stops at a computed actuator command; it does not by itself grant permission to move the physical motor.
+
+### 4.2 Physical actuation / safety-authority architecture
+
+```mermaid
+flowchart TD
+    OP["Explicit Operator Intent"]
+    AG["Closed-loop Admission Gate"]
+    MM["Closed-loop Mode Manager"]
+    RP["Continuous Run Permit\nseparate from admission"]
+    LIM["Closed-loop Command Limits\nMagnitude / Slew"]
+    MA["Motor Authority Arbiter\nNONE / MAINTENANCE / CONTROL / FAULT"]
+    WD["Stale-output Watchdog"]
+    ESTOP["Emergency Stop"]
+    DRV["board_motor / TB6612"]
+    PLANT["Rotary-arm Motor / Physical Plant"]
+    MAINT["Maintenance Motor Service"]
+    CTRL["Computed Closed-loop Command"]
+
+    OP --> AG
+    AG --> MM
+    MM --> RP
+    CTRL --> LIM
+    RP --> LIM
+    LIM --> MA
+    MAINT --> MA
+    WD --> MA
+    ESTOP --> MA
+    MA --> DRV
+    DRV --> PLANT
+```
+
+The **Control State Machine** owns controller-selection and mode-transition authority: it decides which control algorithm may produce the current computed command.
+
+The **Motor Authority Arbiter** owns physical actuator command authority: it decides which owner, if any, may command `board_motor`.
+
+These are intentionally different responsibilities:
+
+```text
+who may compute u
+    !=
+who may cause the rotary-arm motor to move
+```
+
+The arbiter must remain the single physical motor ownership boundary. Automatic control must never bypass it.
+
+### 4.3 Current implemented actuation boundary
+
+The current embedded runtime is intentionally observe-only for automatic control:
+
+```text
+control_pipeline
+    -> controller / actuator command computation
+    -> automatic motor sink = UNBOUND
+```
+
+The current physical actuation path is maintenance-only:
+
+```text
+UART / maintenance command
+    -> motor_test_service
+    -> Motor Authority Arbiter (MAINTENANCE)
+    -> board_motor
+    -> rotary-arm motor
+```
+
+The CONTROL owner, run-permit semantics, command limiter commissioning profile, and independent emergency-stop path must be validated before the automatic sink is bound.
+
+### 4.4 Capability status terminology
+
+Architecture diagrams define topology and target capability; they do not prove implementation maturity. Each capability should be described with one of these states when status matters:
+
+| State | Meaning |
+|---|---|
+| **TARGET** | Intended architectural capability. |
+| **STUB** | Interface/topology exists; behavior is intentionally incomplete, safe-zero, or invalid. |
+| **IMPLEMENTED** | Current source code contains the implementation. |
+| **HOST-VALIDATED** | Deterministic host-side tests support the implementation. |
+| **RUNTIME-VALIDATED** | Exercised on the current embedded target with recorded runtime evidence. |
+| **PHYSICALLY-COMMISSIONED** | Validated with the real plant and actuator under the required safety procedure. |
+
+For example, source files for LQI, Kalman estimation, swing-up, or capture do not by themselves establish that those paths are runtime-validated or physically commissioned.
 
 ---
 
 ## 5. Critical Control Path
 
-The mandatory runtime path is:
+The target control-computation path is:
 
 ```text
 Sensor Acquisition
@@ -122,6 +214,22 @@ Selected Controller
 Actuator Mapping
         ↓
 Output Safety / Saturation
+        ↓
+Computed Actuator Command
+```
+
+Physical actuation, when eventually enabled for automatic control, continues through the system-level authority path:
+
+```text
+Computed Actuator Command
+        ↓
+Admission / Continuous Run Permission
+        ↓
+Closed-loop Output Limits
+        ↓
+Motor Authority Arbiter
+        ↓
+Watchdog / E-stop Enforcement
         ↓
 Motor Driver
 ```
@@ -158,8 +266,8 @@ where:
 
 - `theta`: pendulum angle
 - `theta_dot`: pendulum angular velocity
-- `phi`: rotor-arm position relative to the defined reference
-- `phi_dot`: rotor-arm angular velocity
+- `phi`: rotary-arm position relative to the defined reference
+- `phi_dot`: rotary-arm angular velocity
 
 The state-estimator interface remains constant even when the implementation changes from a basic finite-difference/filter implementation to Kalman filtering or another observer.
 
@@ -178,11 +286,11 @@ Typical checks include:
 - Escape conditions
 - Control-loop timeout
 
-State safety determines whether control is permitted; it does not directly generate PWM.
+State safety determines whether control is permitted; it does not directly generate PWM and it does not itself grant physical motor ownership.
 
 ### 5.4 Control State Machine
 
-Owns controller authority and mode transitions.
+Owns **controller-selection authority and mode transitions**.
 
 Expected modes:
 
@@ -198,7 +306,7 @@ typedef enum
 } control_mode_t;
 ```
 
-The state machine decides which controller may produce the current control command.
+The state machine decides which controller may produce the current control command. It does not own the physical motor; physical ownership is mediated by the Motor Authority Arbiter.
 
 It must not contain the internal mathematics of LQR, LQI, or swing-up algorithms.
 
@@ -236,31 +344,31 @@ The controller must not directly manipulate TB6612 GPIO or PWM registers.
 
 ### 5.7 Output Safety and Saturation
 
-Applies final constraints immediately before hardware output.
+Applies final command-domain constraints before physical authority is considered.
 
 Typical responsibilities:
 
-- PWM clamp
+- PWM / command magnitude clamp
 - Slew-rate limit
 - Unsafe direction-reversal handling
 - Hard arm-position limit
 - Invalid-command rejection
-- Fault-forced motor shutdown
+- Fault-forced zero command
 
 If output safety cannot prove that a command is valid, it must fail closed.
 
-### 5.8 Motor Driver
+### 5.8 Motor Authority and Driver
 
-Provides the hardware-specific TB6612 implementation.
+The Motor Authority Arbiter is the single writer boundary immediately above the hardware-specific motor driver. It separates maintenance, automatic CONTROL ownership, and fault handling.
 
-This layer owns:
+The hardware-specific TB6612 layer owns:
 
 - PWM peripheral access
 - Direction GPIO control
 - Brake/coast electrical behavior
 - Safe-off behavior
 
-Control algorithms must not depend on TB6612-specific details.
+Control algorithms must not depend on TB6612-specific details and must never call the hardware motor driver directly.
 
 ---
 
@@ -326,7 +434,7 @@ These are architectural examples. Exact fields may evolve as system identificati
 
 ## 7. Pipeline Pseudocode
 
-The top-level control loop should remain simple and orchestration-oriented.
+The platform-independent control pipeline should remain simple and orchestration-oriented. It computes a safe command but does not implicitly acquire physical motor authority.
 
 ```c
 void control_pipeline_step(void)
@@ -359,16 +467,13 @@ void control_pipeline_step(void)
     actuator = actuator_mapper_step(&control,
                                     &state);
 
-    /* 7. Final motor-output constraints */
+    /* 7. Final command-domain constraints */
     actuator = output_safety_apply(&actuator,
                                    &state,
                                    &state_safety);
 
-    /* 8. Hardware output */
-    if (g_control_context.motor_output_enabled)
-        board_motor_apply(&actuator);
-    else
-        board_motor_safe_off();
+    /* 8. Publish the computed command to the system-level sink interface. */
+    control_output_publish(&actuator);
 
     /* 9. Optional engineering observability */
     control_trace_push(&sensor,
@@ -380,13 +485,13 @@ void control_pipeline_step(void)
 }
 ```
 
-No individual control algorithm should change the topology of this function.
+The system-level runtime decides whether `control_output_publish()` is unbound, observe-only, or connected through the admission/run-permit and Motor Authority path. No individual control algorithm should change this topology or directly write the motor.
 
 ---
 
 ## 8. Controller Dispatch
 
-The control state machine owns authority; the dispatcher selects the matching implementation.
+The control state machine owns controller-selection authority; the dispatcher selects the matching implementation.
 
 ```c
 control_command_t controller_dispatch(
@@ -421,7 +526,7 @@ control_command_t controller_dispatch(
 }
 ```
 
-Controller authority must be explicit. Multiple controllers must not independently write to the motor output.
+Controller-selection authority must be explicit. Multiple controllers must not independently write to the physical motor output.
 
 ---
 
@@ -492,6 +597,8 @@ BALANCE
 
 Bypass is a state-machine decision, not a removal of architecture interfaces.
 
+The current observe-only commissioning path uses `DISABLED -> IDLE -> BALANCE` to prove legitimate admission semantics without binding the motor. That does not remove the future swing-up/capture topology.
+
 ---
 
 ## 11. Control Math Backend
@@ -533,9 +640,9 @@ Performance-sensitive backend selection should be based on measured execution ti
 
 ## 12. Telemetry and Trace
 
-Telemetry and trace are supporting modules and must not be required for control-loop correctness.
+Telemetry and trace are supporting modules and must not be required for control-loop correctness or safety decisions.
 
-They may be disabled without changing the critical path.
+They may be disabled without changing the critical path. Admission/run-permit logic must consume dedicated runtime status rather than optional trace data.
 
 ### 12.1 MOTOR_TRACE
 
@@ -577,6 +684,9 @@ u_mapped
 PWM
 direction
 safety_flags
+admission_flags
+run_permit_flags
+motor_authority
 VBUS
 ```
 
@@ -587,6 +697,7 @@ Primary use:
 - Capture-transition analysis
 - State-estimator validation
 - Fault analysis
+- Admission / run-permit analysis
 - Model-to-hardware correlation
 
 High-rate trace should not perturb the real-time control loop. Where necessary, samples should be stored in RAM and transmitted after the critical control action has completed.
@@ -603,23 +714,11 @@ Runtime-selectable behavior may include:
 - Balance-controller mode
 - Swing-up enable/bypass
 - Capture enable/bypass
-- Motor-output enable
+- Operator control request / mode-management state
+- Commissioning output-limit profile
 - Telemetry enable
 
-Example:
-
-```c
-typedef struct
-{
-    state_estimator_mode_t estimator_mode;
-    balance_controller_t balance_controller;
-
-    bool swing_up_enabled;
-    bool capture_enabled;
-    bool motor_output_enabled;
-    bool telemetry_enabled;
-} control_runtime_config_t;
-```
+Physical automatic motor binding must not be treated as an ordinary permissive runtime toggle before the safety architecture is commissioned.
 
 ### 13.2 Build Configuration
 
@@ -663,7 +762,7 @@ control_state_t kalman_estimator_step(...)
 
 ### 14.3 Safety Stub
 
-Safety must not default to permissive pass-through. If a safety implementation is incomplete or invalid, the system should force motor output off.
+Safety must not default to permissive pass-through. If a safety implementation or required configuration is incomplete or invalid, the physical automatic-control path must remain blocked.
 
 ### 14.4 Unsupported Configuration
 
@@ -681,11 +780,14 @@ The following requirements apply:
 2. All required symbols must link successfully.
 3. Existing host-side tests must continue to build and pass.
 4. STM32 target firmware must continue to build successfully.
-5. Default startup behavior must leave motor output disabled or in a defined safe state.
+5. Default startup behavior must leave physical automatic motor output disabled or unbound.
 6. A valid runtime path must execute even when advanced modules remain stubs.
 7. No architecture module may rely on hidden global side effects to bypass its declared interface.
+8. Physical motor writes must pass through the Motor Authority Arbiter.
+9. Admission and continuous run-permit semantics must fail closed on unavailable or stale runtime status.
+10. Safety and performance changes require reproducible build/runtime evidence before commissioning status is advanced.
 
-A minimal valid runtime path is:
+A minimal valid observe-only runtime path is:
 
 ```text
 Sensor Acquisition
@@ -694,13 +796,13 @@ Basic State Estimator
         ↓
 State Safety
         ↓
-IDLE / zero-command control path
+IDLE / zero-command or selected-controller computation
         ↓
 Actuator Mapper
         ↓
 Output Safety
         ↓
-Motor Safe-Off
+Automatic Motor Sink UNBOUND
         ↓
 Optional Trace
 ```
@@ -712,6 +814,13 @@ Optional Trace
 The final repository organization may evolve, but the following structure reflects the architecture boundaries:
 
 ```text
+app/
+├── closed_loop_enable_gate.c
+├── closed_loop_gate_runtime.c
+├── closed_loop_mode_manager.c
+├── motor_authority.c
+└── system-level runtime adapters
+
 control/
 ├── control_pipeline.c
 ├── control_pipeline.h
@@ -760,7 +869,8 @@ The existing project structure does not need to be reorganized wholesale in a si
 
 Any new implementation or refactor should be reviewed against the following questions:
 
-- Does the change preserve the critical path?
+- Does the change preserve the control-computation critical path?
+- Does it preserve the physical actuator-authority boundary?
 - Does the affected module still have one clear responsibility?
 - Can the implementation be replaced without changing unrelated modules?
 - If the module is non-critical, can it be disabled cleanly?
@@ -770,10 +880,41 @@ Any new implementation or refactor should be reviewed against the following ques
 - Can the behavior be observed through trace/telemetry without affecting control correctness?
 - Are state, coordinate, timing, and unit conventions explicit?
 - Is hardware-specific behavior isolated below the actuator boundary?
+- Is controller-selection authority clearly separated from physical motor authority?
+- Are admission-only conditions kept separate from continuous run-permit conditions?
+- Is the claimed maturity level TARGET/STUB/IMPLEMENTED/HOST-VALIDATED/RUNTIME-VALIDATED/PHYSICALLY-COMMISSIONED supported by evidence?
+- Is each physical or safety-critical fact tagged with appropriate provenance rather than inferred from legacy behavior or source-file existence?
 
 ---
 
-## 18. Architectural Intent
+## 18. Current Project Position
+
+As of the current architecture rebaseline, the project has passed the major observe-only foundations and is still deliberately before physical automatic motor binding.
+
+```text
+hardware / I/O bring-up                     validated foundation
+maintenance motor path                      validated foundation
+control computation architecture            integrated
+observe-only runtime                        integrated / runtime-validated
+explicit observe-only state safety          runtime-validated
+pipeline status independent of trace        runtime-validated
+closed-loop admission gate                  runtime-validated in reject/pass prerequisites
+legitimate mode transition                  implemented / host and build integrated; runtime validation active
+admission vs continuous run permit          next architecture step
+operator arm/enable/disable/status           planned
+closed-loop magnitude / slew limiters        planned
+independent emergency-stop path              planned
+full observe-only gate/permit proof          planned
+CONTROL motor-sink binding                   blocked until prerequisites pass
+plant identification                         later commissioning work
+PID / LQR physical commissioning             later commissioning work
+```
+
+This ordering is intentional. A controller being able to calculate a nonzero `u` is not permission to actuate the plant.
+
+---
+
+## 19. Architectural Intent
 
 The architecture is intended to support progressive replacement of implementations without repeated structural redesign.
 
@@ -787,7 +928,6 @@ Manual Capture   <->  Swing-up + Capture
 Current Motor Backend <-> Future Actuator Backend
 ```
 
-The architecture therefore aims for four properties:
+The architecture therefore aims for five properties:
 
-> **Complete topology. Stable interfaces. Replaceable implementations. Buildable at every step.**
-
+> **Complete topology. Stable interfaces. Replaceable implementations. Explicit actuator authority. Buildable and fail-safe at every step.**
