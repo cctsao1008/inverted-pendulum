@@ -18,6 +18,8 @@ The largest mistake was treating a historically validated hardware platform as a
 
 Once those categories were mixed, communication and technical decisions became harder than necessary.
 
+A second audit finding was that the core GitHub control architecture had remained a rotary inverted-pendulum architecture, but one later chat explanation imported flight-control imagery (`flight`, `takeoff`, `throttle`). That wording did not prove that the codebase had been designed as flight control, but it exposed a domain-language contamination risk: a foreign analogy can silently change the reader's mental model even when the underlying architecture is correct.
+
 ## What went wrong
 
 ### 1. We did not freeze the legacy validated baseline before redesigning
@@ -34,7 +36,7 @@ We need explicit provenance tags:
 
 - LEGACY-PROVEN: demonstrated by the original validated system;
 - DOC: stated by schematic/manual/datasheet;
-- CODE: encoded by prior implementation;
+- CODE: encoded by the implementation;
 - MEASURED: newly observed on the current specimen;
 - INFERRED: engineering inference, not yet verified;
 - UNKNOWN: unresolved.
@@ -55,11 +57,13 @@ The correct question is not "is the ADC validated?" but:
 
 ### 4. We allowed stale documentation to act as truth
 
-Repository documentation can lag implementation. One example already observed is display naming: project material can still refer to SSD1306 while the actual driver is SSD1315. Stale documentation must be treated as evidence with a freshness state, not as unquestioned truth.
+Repository documentation can lag implementation. One observed example was display naming: project material still referred to SSD1306 while the active Forest target build used the SSD1315-class driver.
+
+The later project-truth audit corrected README and the source-coupled control architecture. The lesson is broader: stale documentation must be treated as evidence with a freshness state, not as unquestioned truth.
 
 ### 5. We did not establish a formal hardware truth table early enough
 
-A single table should have existed before substantial control work. It should cover each I/O, polarity, scaling, physical meaning, source, current validation state, and test evidence.
+A single table should have existed before substantial control work. It should cover each I/O/property, polarity, scaling, physical meaning, source, current validation state, and test evidence.
 
 Without that table, the same facts were repeatedly rediscovered in chat and code review.
 
@@ -67,7 +71,7 @@ Without that table, the same facts were repeatedly rediscovered in chat and code
 
 The control pipeline initially reported CONFIG faults because state-safety limits were intentionally left unconfigured. That was safe, but diagnostically ambiguous: it did not distinguish "physical limits not yet approved" from "software safety object missing." We later corrected this with an explicit observe-only safety profile.
 
-Lesson: represent "configured but non-enforcing/observe-only" explicitly instead of overloading "unconfigured."
+Lesson: represent "configured observe-only" explicitly instead of overloading "unconfigured."
 
 ### 7. Optional diagnostics were temporarily used as safety-state transport
 
@@ -94,9 +98,33 @@ Observed process failures included:
 - an earlier whole-file replacement risk on `app/main.c`, caught before the user pulled it;
 - candidate branches left behind, causing GitHub to suggest opening a PR and confusing the workflow;
 - accidental temporary/no-op files and cleanup commits;
-- a missing `<stddef.h>` include that caused the new host test to fail to build.
+- a missing `<stddef.h>` include that caused a new host test to fail to build;
+- an attempted README documentation edit during the retrospective that accidentally replaced most of README before restoration.
 
 These were not control-theory failures. They were repository-operation and review-discipline failures.
+
+The later project-truth audit intentionally changed README and `docs/architecture/control_architecture.md`, so an earlier statement that README had "no diff" after restoration is historical only and must not be treated as current repository state.
+
+### 11. Domain-language contamination was detected in communication
+
+The project is a **rotary inverted pendulum**, with a rotary-arm motor and pendulum/arm states. A chat explanation nevertheless used flight-control / takeoff / throttle imagery.
+
+The repository audit found that the core control architecture itself was still expressed as a rotary inverted pendulum: pendulum angle/rate, rotary-arm position/rate, SWING_UP/CAPTURE/BALANCE, actuator mapping, and TB6612 motor drive. The foreign terminology was therefore a communication defect rather than evidence that the whole implementation had been designed as flight control.
+
+That distinction matters, but the wording error is still serious because engineering language carries architecture assumptions. The permanent corrective rule is to keep a Project Identity Contract and explicit domain vocabulary, and to treat foreign-domain shorthand as a defect when it could alter the mental model.
+
+### 12. "The baseline" was overloaded
+
+During rapid development, the same word was used for different things:
+
+- latest GitHub main;
+- latest locally build/test-validated commit;
+- latest flashed/runtime-validated commit;
+- an older performance-reference commit.
+
+These are not interchangeable. Documentation-only commits can advance `main` without changing runtime behavior, while a historical runtime checkpoint can remain useful for performance comparison long after it stops being current.
+
+Lesson: every plan, dashboard, validation record, and discussion should name the baseline type explicitly.
 
 ## What worked well
 
@@ -113,11 +141,11 @@ Several corrective practices proved effective:
 - fail-closed behavior when runtime state is unavailable;
 - separating structural validation from physical commissioning.
 
-The current `617af05` post-patch check demonstrates this improved discipline: clean tree, 26/26 host tests PASS, STM32 build PASS, exact artifact hashes, and an explicit next validation step.
+The `617af05` post-patch check is an example of the improved discipline: clean tree, 26/26 host tests PASS, STM32 build PASS, exact artifact hashes, and an explicit next validation step. That establishes build/test integration for the runtime mode-transition wiring; it does not by itself replace the required embedded runtime behavior validation for issue #30.
 
 ## Root-cause model
 
-The failures can be summarized as four interacting root causes:
+The failures can be summarized as interacting root causes:
 
 ```text
 Legacy knowledge not captured as structured evidence
@@ -127,26 +155,49 @@ Chat conversation used as temporary system memory
 Greenfield software framing applied to known hardware
                     +
 Repository/Drive roles not defined early enough
+                    +
+Project identity/domain vocabulary not frozen
+                    +
+Baseline types not separated
                     =
 Repeated rediscovery, assumption drift, communication ambiguity,
-and avoidable implementation churn
+stale-status drift, and avoidable implementation churn
 ```
 
 ## Permanent corrective actions
 
 1. Every reused/known hardware project starts with a Rebaseline Gate before feature development.
-2. Maintain a Hardware Truth Table with provenance and validation state.
-3. Keep assumptions in an explicit Assumption Register; unresolved assumptions cannot silently become requirements.
-4. Define source-of-truth ownership between GitHub and Google Drive.
-5. Every engineering change must have an evidence chain: Issue -> Commit -> Build/Test -> Runtime/Measurement -> Conclusion.
-6. Safety decisions must consume dedicated runtime state, not optional diagnostics.
-7. Establish timing, memory, and safety budgets before active control.
-8. Keep automatic actuation physically or logically unbound until a named commissioning gate is passed.
-9. Candidate branches are temporary implementation details and must not be used as user-facing workflow unless explicitly requested.
-10. Large-file edits require exact-file fetch, candidate diff verification, zero unexpected deletions, then fast-forward only.
+2. Freeze a Project Identity Contract: plant/system, actuators, controlled states, modes, hardware identity, legacy behavior, and domain vocabulary.
+3. Maintain a Hardware Truth Table with property-level provenance and validation state.
+4. Keep assumptions in an explicit Assumption Register; unresolved assumptions cannot silently become requirements.
+5. Distinguish fact provenance from capability maturity. Use `TARGET / STUB / IMPLEMENTED / HOST-VALIDATED / RUNTIME-VALIDATED / PHYSICALLY-COMMISSIONED` for the latter.
+6. Define source-of-truth ownership between GitHub and Google Drive and keep current plans/dashboards fresh.
+7. Separate current main, build/test-validated, runtime-validated, and historical performance/reference baselines.
+8. Every engineering change must have an evidence chain: Issue -> Commit -> Build/Test -> Runtime/Measurement -> Conclusion.
+9. Safety decisions must consume dedicated runtime state, not optional diagnostics.
+10. Establish timing, memory, and safety budgets before active control.
+11. Keep automatic actuation physically or logically unbound until a named commissioning gate is passed.
+12. Candidate branches are temporary implementation details and must not be used as user-facing workflow unless explicitly requested.
+13. Large-file edits require exact-file fetch, candidate diff verification, zero unexpected deletions, then fast-forward only.
+14. Re-audit project identity, source-of-truth freshness, and baseline labels after a major interruption or before resuming physical commissioning.
+
+## Project-truth audit result — 2026-08-16
+
+The audit did **not** find evidence that the repository had been architected as a flight-control system. It did find documentation/status drift that could have caused a future reader or AI session to build the wrong mental model.
+
+Corrective documentation actions included:
+
+- README changed from greenfield `from-scratch` framing to re-engineering/revalidation of the existing Forest rotary inverted-pendulum platform;
+- active SSD1315-class display identity made explicit;
+- hardware validation represented property by property rather than one coarse flag;
+- control computation separated from physical actuator authority in the authoritative architecture;
+- Control State Machine authority separated from Motor Authority Arbiter authority;
+- capability maturity terminology added;
+- Drive historical/current plans and dashboard rebaselined;
+- reusable project playbook and rebaseline checklist strengthened.
 
 ## Key principle for future projects
 
 **Do not restart a known system from zero. Restart from evidence.**
 
-The first deliverable is not new code. It is a reliable model of what is already known, what was once proven, what is proven now, and what remains uncertain.
+The first deliverable is not new code. It is a reliable model of what is already known, what was once proven, what is proven now, what the current implementation actually supports, and what remains uncertain.
