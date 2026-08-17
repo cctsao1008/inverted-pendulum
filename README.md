@@ -185,23 +185,20 @@ See [Communication and Parameter Architecture](docs/architecture/communications.
 
 ## Physical platform contract
 
-| Item | Forest S1 + Forest D1 (2016) baseline |
-|---|---|
-| MCU | STM32F103C8T6 |
-| Framework | Bare metal with libopencm3 |
-| MCU clock | 8 MHz HSE, 72 MHz system clock |
-| Control tick | 1 kHz |
-| Pendulum input | **PA7 / ADC1_IN7**; mapping implemented; full control-grade calibration tracked separately |
-| Battery voltage input | PA6 / ADC1_IN6 through a 10 kΩ / 1 kΩ divider; meter calibration required before protection use |
-| Arm encoder | TIM2 quadrature input on PA0/PA1 (A0/A1 connector signals); physical sign/zero/scale validation tracked separately |
-| Maintenance interface | USART1 on PA9/PA10, 115200 baud; text commands and telemetry |
-| Local keys | PA3 M, PA2 X, PA11 +, PA12 -, PA5 USER; active-low |
-| Telemetry control | PA5 USER button or `telem on/off`; default off; runtime rate 1–20 Hz |
-| OLED | **SSD1315-class** 128x64 software SPI: PB5 CLK, PB4 DATA, PB3 RESET, PA15 D/C; SWD retained |
-| Motor B control | PB1 / TIM3_CH4 PWM, PB13 / BIN1, PB12 / BIN2 |
-| Motor output | Maintenance test only: 20 kHz PWM, `±20%` maximum for ordinary tests; specialized characterization commands have their own explicit bounds |
+Only hardware properties that directly shape the control architecture are summarized here:
 
-The STM32F103C8T6 board remains the immediate baseline because it plugs directly into the existing driver board. A **Raspberry Pi Pico 2 / RP2350** port, including native USB HID and CDC, is a planned later platform and is not implemented on `main`.
+- **Controller:** STM32F103C8T6 at 72 MHz, using bare-metal libopencm3.
+- **Plant:** Forest D1 rotary inverted pendulum, 2016 hardware baseline.
+- **Pendulum sensing:** analog angle sensor on **PA7 / ADC1_IN7**.
+- **Rotary-arm sensing:** quadrature encoder; the current firmware reference is **1040 counts per output-shaft revolution**, pending final specimen validation.
+- **Actuation:** TB6612FNG H-bridge driving the rotary-arm DC motor.
+- **Motor / gearing:** nominal 12 V DC motor with 1:20 gearbox on the original Forest mechanism.
+- **Power observation:** motor-supply voltage is monitored in firmware; protection use still requires calibration against a trusted meter.
+- **Control timing:** 1 kHz firmware timing baseline.
+
+The STM32F103C8T6 board remains the immediate target because it plugs directly into the existing Forest D1 baseboard. Pin-level wiring, user-interface connections, OLED signals, maintenance UART details, electrical notes, and validation checklists are kept in [Forest D1 2016 hardware baseline](docs/hardware/forest-d1-2016-baseline.md).
+
+A **Raspberry Pi Pico 2 / RP2350** port, including native USB HID and CDC, is a planned later platform and is not implemented on `main`.
 
 ## Project truth and validation model
 
