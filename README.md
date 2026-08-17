@@ -204,7 +204,7 @@ A **Raspberry Pi Pico 2 / RP2350** port, including native USB HID and CDC, is a 
 
 This repository distinguishes several kinds of evidence:
 
-- **LEGACY-PROVEN** — known behavior of the earlier working Forest system.
+- **LEGACY-VALIDATED** — behavior known to have worked on the original Forest product or historical firmware; useful as reference, but not proof of the current implementation.
 - **DOC** — supported by schematic, datasheet, vendor material, or another controlled document.
 - **CODE** — implemented in the current repository.
 - **MEASURED** — observed on the current physical specimen.
@@ -236,7 +236,7 @@ A source file or architecture block is not automatically a commissioned capabili
 
 ## Current implementation state
 
-The original Forest S1 / D1 hardware is treated as a **legacy-proven, known-working physical baseline**. Current development is therefore focused on replacing and restructuring the firmware and control stack, not on re-proving the product hardware.
+The original Forest S1 / D1 hardware is treated as a **legacy-validated, known-working physical baseline**. Current development is therefore focused on replacing and restructuring the firmware and control stack, not on re-proving the product hardware.
 
 Control-relevant properties are still measured where the new architecture depends on them. Motor/encoder polarity, sensor reference and sign, dead zone, response dynamics, saturation, and braking behavior are control-model facts rather than basic hardware bring-up questions.
 
@@ -264,7 +264,7 @@ energy swing-up / capture        PLANNED
 physical closed-loop balance     BLOCKED
 ```
 
-The hardware is legacy-proven as a functioning product; the new control implementation is commissioned independently so undocumented assumptions are not inherited as control facts.
+The hardware is legacy-validated as a functioning product; the new control implementation is commissioned independently so undocumented assumptions are not inherited as control facts.
 
 ## Pendulum-sensor validation status
 
