@@ -10,11 +10,6 @@ The current hardware baseline is the original **Forest S1 STM32F103C8T6 controll
 
 Platform-independent control modules are developed and tested on the host before they are connected to real motor output.
 
-> [!CAUTION]
-> The balance controller is not yet connected to physical motor output. Normal `motor test` maintenance commands require explicit arm and remain limited to `20%` and 10 seconds. Characterization may ramp to `30%`; dedicated response/brake characterization commands can use higher explicitly requested duties within their own bounds. These paths automatically stop/disarm on their defined completion or fault conditions. Lift and secure the mechanism, keep clear of the rotating arm, and use a current-limited motor supply.
->
-> The firmware maps the pendulum input to **PA7 / ADC1_IN7**, and runtime observations exist, but the complete control-grade calibration is not finished. Zero/reference, sign convention, full physical range/wrap behavior, noise/bias/repeatability, and approved control limits are tracked separately. Do not infer active-control validity from the existence of an ADC reading alone.
-
 ## Design principles
 
 The repository is built around several system-level rules:
