@@ -236,57 +236,35 @@ A source file or architecture block is not automatically a commissioned capabili
 
 ## Current implementation state
 
-The `main` branch currently contains these foundations:
+The original Forest S1 / D1 hardware is treated as a **legacy-proven, known-working physical baseline**. Current development is therefore focused on replacing and restructuring the firmware and control stack, not on re-proving the product hardware.
 
-- STM32F103C8T6 bring-up using [libopencm3](https://github.com/libopencm3/libopencm3)
-- 1 kHz firmware timing baseline
-- Sensor-acquisition framework with the pendulum ADC mapped to PA7 / ADC1_IN7
-- Arm quadrature-encoder acquisition
-- Five-key local input service for M/X/+/-/USER with debounce, long-press, and repeat events
-- **SSD1315-class** 128x64 local status UI using bounded software-SPI updates
-- USER-key-controlled UART telemetry at 115200 baud and 10 Hz when enabled
-- Text UART command interface and RAM-only runtime parameter registry
-- Wrap-safe pendulum ADC conversion to `[-pi, pi)`
-- Bounded Motor B maintenance test on PB1/PB12/PB13
-- VBUS monitoring on PA6 / ADC1_IN6 (nominal 11:1 conversion; calibration still required before protection use)
-- Control-loop timing profiling output
-- Platform-independent control configuration
-- Fail-closed state-safety path
-- Filtered four-state estimator
-- Four-state balance-controller path using `u = -Kx`
-- Platform-independent `control_pipeline` with dedicated runtime status
-- Closed-loop admission gate and explicit operator enable request
-- Legitimate closed-loop mode-transition helper for `DISABLED -> IDLE -> BALANCE` admission flow
-- Motor Authority Arbiter with NONE / MAINTENANCE / CONTROL / FAULT ownership semantics
-- 5 ms stale closed-loop output watchdog contract
-- STM32 observe-only control runtime with wrap-safe continuous arm position and control trace
-- Host-side tests for control contracts, safety boundaries, runtime configuration, and application adapters
+Control-relevant properties are still measured where the new architecture depends on them. Motor/encoder polarity, sensor reference and sign, dead zone, response dynamics, saturation, and braking behavior are control-model facts rather than basic hardware bring-up questions.
 
-`app/main.c` feeds real STM32 sensor samples into `control_pipeline_step()` at the real 1 kHz cadence without replaying missed control cycles. The automatic-control motor sink remains intentionally **unbound**, so the bounded UART maintenance path remains the only current path that can write the physical motor.
+The current software foundation includes:
 
-### Commissioning ladder status
+- platform-independent state-estimation and control pipeline
+- fail-closed state and actuator-authority architecture
+- observe-only closed-loop runtime
+- explicit closed-loop admission and Motor Authority Arbiter
+- bounded maintenance and plant-characterization path
+- host-side deterministic validation of control and safety contracts
+
+Automatic `CONTROL -> motor` binding remains intentionally disabled while the remaining closed-loop boundaries are commissioned.
+
+### Control commissioning status
 
 ```text
-hardware / I/O bring-up                     DONE
-maintenance motor path                      DONE
-control computation architecture            DONE
-observe-only runtime                        DONE
-explicit observe-only state safety          DONE
-dedicated pipeline status                   DONE
-closed-loop admission gate                  DONE
-legitimate mode-transition implementation   DONE / runtime validation in progress
-admission vs continuous run-permit split    NEXT
-operator control interface                  PLANNED
-magnitude / slew output limits              PLANNED
-independent emergency stop                  PLANNED
-full observe-only admission proof           PLANNED
-CONTROL motor-sink binding                  BLOCKED
-plant identification                        PLANNED
-PID / LQR commissioning                     PLANNED
-restrained physical balance commissioning   BLOCKED
+control architecture             IMPLEMENTED
+observe-only runtime             IMPLEMENTED
+authority / admission model      IMPLEMENTED
+safe-shutdown boundary           IN PROGRESS
+plant identification             PLANNED
+LQR / LQI commissioning          PLANNED
+energy swing-up / capture        PLANNED
+physical closed-loop balance     BLOCKED
 ```
 
-The immediate technical focus is the legitimate closed-loop mode transition and its runtime validation while the automatic motor sink remains unbound. Physical actuator binding is deliberately later work.
+The hardware is legacy-proven as a functioning product; the new control implementation is commissioned independently so undocumented assumptions are not inherited as control facts.
 
 ## Pendulum-sensor validation status
 
