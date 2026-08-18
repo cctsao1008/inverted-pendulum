@@ -138,23 +138,6 @@ Only hardware properties that directly shape the control architecture are summar
 
 The Forest S1 controller module is the direct-fit baseline for the existing Forest D1 baseboard. Pin-level wiring, user-interface connections, OLED signals, maintenance UART details, electrical notes, and validation checklists are kept in [Forest D1 2016 hardware baseline](docs/hardware/forest-d1-2016-baseline.md).
 
-## Validation model
-
-README uses two compact vocabularies:
-
-```text
-Evidence:
-LEGACY-VALIDATED / DOC / CODE / MEASURED / INFERRED / UNKNOWN
-
-Capability maturity:
-TARGET / STUB / IMPLEMENTED / HOST-VALIDATED /
-RUNTIME-VALIDATED / PHYSICALLY-COMMISSIONED
-```
-
-Evidence describes **what supports a claim**. Capability maturity describes **how far an implementation has been validated or commissioned**.
-
-See [Validation and Evidence Model](docs/validation/evidence-model.md).
-
 ## Communication and ROS 2 integration
 
 Communication remains outside the control core.
