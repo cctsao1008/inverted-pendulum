@@ -173,36 +173,6 @@ The Forest S1 controller module remains the immediate target because it plugs di
 
 A **Raspberry Pi Pico 2 / RP2350** port, including native USB HID and CDC, is a planned later platform and is not implemented on `main`.
 
-## Current implementation state
-
-The original **Forest D1 hardware with its Forest S1 controller module** is treated as a **legacy-validated, known-working physical baseline**. Current development therefore focuses on replacing and restructuring the firmware and control stack, not on re-proving the product hardware.
-
-Control-relevant properties are still measured where the new architecture depends on them. Motor/encoder polarity, sensor reference and sign, dead zone, response dynamics, saturation, and braking behavior are control-model facts rather than basic hardware bring-up questions.
-
-Current software foundations include:
-
-- platform-independent state-estimation and control pipeline
-- fail-closed state and actuator-authority architecture
-- observe-only closed-loop runtime
-- explicit closed-loop admission and Motor Authority Arbiter
-- bounded maintenance and plant-characterization path
-- host-side deterministic validation of control and safety contracts
-
-Automatic `CONTROL -> motor` binding remains intentionally disabled while the remaining closed-loop boundaries are commissioned.
-
-```text
-control architecture             IMPLEMENTED
-observe-only runtime             IMPLEMENTED
-authority / admission model      IMPLEMENTED
-safe-shutdown boundary           IN PROGRESS
-plant identification             PLANNED
-LQR / LQI commissioning          PLANNED
-energy swing-up / capture        PLANNED
-physical closed-loop balance     BLOCKED
-```
-
-The hardware is legacy-validated as a functioning product; the new control implementation is commissioned independently so undocumented assumptions are not inherited as control facts.
-
 ## Validation model
 
 README uses two compact vocabularies:
