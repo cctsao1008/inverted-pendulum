@@ -207,82 +207,6 @@ Transport and middleware must remain outside controller logic and must not impli
 
 See [Communication and Parameter Architecture](docs/architecture/communications.md).
 
-## Repository layout
-
-```text
-app/                    STM32 firmware application and system-level adapters
-cmake/                  Cross-compilation toolchain
-control/                Platform-independent estimator, safety, and control logic
-drivers/                 Display and peripheral drivers
-docs/architecture/      Source-coupled architecture and contracts
-docs/commissioning/     Firmware and plant commissioning procedures
-docs/hardware/          Schematic-derived hardware baselines and validation notes
-docs/process/           Engineering process records
-docs/validation/        Evidence and capability-validation model
-docs/templates/         Reusable engineering templates
-platform/stm32f103/     STM32F103 board support and linker configuration
-tests/                  Host-side unit tests
-third_party/            External source dependencies
-tools/                  Reproducible validation and runtime tooling
-```
-
-## Build and test
-
-Clone with the libopencm3 submodule:
-
-```bash
-git clone --recursive https://github.com/cctsao1008/inverted-pendulum.git
-cd inverted-pendulum
-```
-
-For an existing clone:
-
-```bash
-git submodule update --init --recursive
-```
-
-### Host tests
-
-Requirements:
-
-- CMake 3.16 or newer
-- Ninja
-- A C11 host compiler
-
-```bash
-cmake -S . -B build/host -G Ninja \
-  -DBUILD_STM32_FIRMWARE=OFF \
-  -DBUILD_HOST_TESTS=ON
-
-cmake --build build/host
-ctest --test-dir build/host --output-on-failure
-```
-
-### STM32F103 firmware
-
-Additional requirements:
-
-- Arm GNU Toolchain (`arm-none-eabi-gcc`)
-- GNU Make for building libopencm3
-
-```bash
-cmake -S . -B build/stm32f103 -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-arm-none-eabi.cmake \
-  -DBUILD_STM32_FIRMWARE=ON \
-  -DBUILD_HOST_TESTS=OFF
-
-cmake --build build/stm32f103
-```
-
-Expected outputs:
-
-```text
-build/stm32f103/inverted-pendulum.elf
-build/stm32f103/inverted-pendulum.hex
-build/stm32f103/inverted-pendulum.bin
-build/stm32f103/inverted-pendulum.map
-```
-
 ## Documentation
 
 - [Control Architecture](docs/architecture/control_architecture.md)
@@ -290,4 +214,6 @@ build/stm32f103/inverted-pendulum.map
 - [Forest D1 2016 Hardware Baseline](docs/hardware/forest-d1-2016-baseline.md)
 - [Firmware Commissioning](docs/commissioning/firmware-commissioning.md)
 - [Motor Commissioning and Characterization](docs/commissioning/motor-characterization.md)
+- [Repository Layout](docs/development/repository-layout.md)
+- [Build and Test](docs/development/build-and-test.md)
 - [Validation and Evidence Model](docs/validation/evidence-model.md)
