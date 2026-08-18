@@ -1,12 +1,12 @@
 # Rotary Inverted Pendulum
 
-Re-engineered embedded firmware and control software for the existing Forest S1 / Forest D1 rotary inverted pendulum platform.
+Re-engineered embedded firmware and control software for the existing **Forest D1 rotary inverted pendulum**, using its original **Forest S1 STM32 controller module**.
 
 > **A known-working plant is not the same thing as a known control system.**
 
 This project is not primarily about proving that an STM32 can balance an inverted pendulum. The historical Forest mechanism already demonstrated that the physical plant can work. The purpose of this repository is to rebuild that system into a **measurable, testable, safety-gated, and progressively commissionable embedded control platform**.
 
-The current hardware baseline is the original **Forest S1 STM32F103C8T6 controller plus Forest D1 baseboard (2016 revision)**. Hardware facts, sensor calibration, plant behavior, control computation, and physical actuator authority are treated as separate engineering properties and are validated independently.
+The current hardware baseline is the original **Forest D1 baseboard and mechanism with its Forest S1 STM32F103C8T6 controller module (2016 revision)**. Hardware facts, sensor calibration, plant behavior, control computation, and physical actuator authority are treated as separate engineering properties and are validated independently.
 
 Platform-independent control modules are developed and tested on the host before they are connected to real motor output.
 
@@ -161,7 +161,7 @@ sensor / actuator interface verification
 
 Only hardware properties that directly shape the control architecture are summarized here:
 
-- **Controller:** STM32F103C8T6 at 72 MHz, using bare-metal libopencm3.
+- **Controller module:** Forest S1 with STM32F103C8T6 at 72 MHz, using bare-metal libopencm3.
 - **Plant:** Forest D1 rotary inverted pendulum, 2016 hardware baseline.
 - **Pendulum sensing:** analog angle sensor on **PA7 / ADC1_IN7**.
 - **Rotary-arm sensing:** quadrature encoder; current firmware reference is **1040 counts per output-shaft revolution**, pending final specimen-level control validation.
@@ -169,13 +169,13 @@ Only hardware properties that directly shape the control architecture are summar
 - **Motor / gearing:** nominal 12 V DC motor with 1:20 gearbox on the original Forest mechanism.
 - **Control timing:** 1 kHz firmware timing baseline.
 
-The STM32F103C8T6 board remains the immediate target because it plugs directly into the existing Forest D1 baseboard. Pin-level wiring, user-interface connections, OLED signals, maintenance UART details, electrical notes, and validation checklists are kept in [Forest D1 2016 hardware baseline](docs/hardware/forest-d1-2016-baseline.md).
+The Forest S1 controller module remains the immediate target because it plugs directly into the existing Forest D1 baseboard. Pin-level wiring, user-interface connections, OLED signals, maintenance UART details, electrical notes, and validation checklists are kept in [Forest D1 2016 hardware baseline](docs/hardware/forest-d1-2016-baseline.md).
 
 A **Raspberry Pi Pico 2 / RP2350** port, including native USB HID and CDC, is a planned later platform and is not implemented on `main`.
 
 ## Current implementation state
 
-The original Forest S1 / D1 hardware is treated as a **legacy-validated, known-working physical baseline**. Current development therefore focuses on replacing and restructuring the firmware and control stack, not on re-proving the product hardware.
+The original **Forest D1 hardware with its Forest S1 controller module** is treated as a **legacy-validated, known-working physical baseline**. Current development therefore focuses on replacing and restructuring the firmware and control stack, not on re-proving the product hardware.
 
 Control-relevant properties are still measured where the new architecture depends on them. Motor/encoder polarity, sensor reference and sign, dead zone, response dynamics, saturation, and braking behavior are control-model facts rather than basic hardware bring-up questions.
 
