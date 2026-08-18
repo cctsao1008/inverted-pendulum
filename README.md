@@ -124,39 +124,6 @@ The exact coast / brake / standby behavior belongs to the actuator and hardware 
 
 See [Control Architecture](docs/architecture/control_architecture.md).
 
-## Commissioning philosophy
-
-The project intentionally avoids jumping directly from “the sensor moves” to “run the controller.”
-
-```text
-Observe
-  -> Measure
-  -> Characterize
-  -> Identify
-  -> Estimate
-  -> Compute
-  -> Admit
-  -> Authorize
-  -> Actuate
-  -> Balance
-```
-
-At the plant/control boundary:
-
-```text
-sensor / actuator interface verification
-        -> motor and encoder polarity
-        -> dead-zone / response characterization
-        -> plant identification
-        -> state-estimation validation
-        -> observe-only controller execution
-        -> closed-loop admission proof
-        -> bounded actuator authority
-        -> restrained physical balance commissioning
-```
-
-**Balancing is a commissioning milestone, not the architecture.** A successful balance result is meaningful only when the assumptions, state validity, authority path, and safety behavior leading to it are traceable.
-
 ## Physical platform
 
 Only hardware properties that directly shape the control architecture are summarized here:
@@ -212,6 +179,7 @@ See [Communication and Parameter Architecture](docs/architecture/communications.
 - [Control Architecture](docs/architecture/control_architecture.md)
 - [Communication and Parameter Architecture](docs/architecture/communications.md)
 - [Forest D1 2016 Hardware Baseline](docs/hardware/forest-d1-2016-baseline.md)
+- [Commissioning Philosophy](docs/commissioning/commissioning-philosophy.md)
 - [Firmware Commissioning](docs/commissioning/firmware-commissioning.md)
 - [Motor Commissioning and Characterization](docs/commissioning/motor-characterization.md)
 - [Repository Layout](docs/development/repository-layout.md)
