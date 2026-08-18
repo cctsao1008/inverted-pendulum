@@ -61,7 +61,7 @@ Physical Sensors
     -> validated plant state
 ```
 
-The control state is based on pendulum and rotary-arm measurements. Kalman-estimator work exists in the architecture, while estimator source code, host validation, runtime validation, and physical commissioning remain distinct capability states.
+The estimator boundary supports interchangeable estimation strategies while keeping sensor acquisition, validation, and controller logic separated.
 
 ### Control plane
 
@@ -93,7 +93,7 @@ pendulum hanging / low-energy state
 
 Energy-based swing-up addresses the large-angle nonlinear problem of bringing the pendulum toward the energy required for the upright equilibrium. Capture logic manages the transition into the local stabilizing region. PD/PID, LQR, and integral-augmented LQI belong to the upright stabilization side of the architecture.
 
-Controller availability and controller commissioning are intentionally separate concepts. The presence of LQI, Kalman-estimator, swing-up, or capture source files does **not** mean those paths are runtime-validated or physically commissioned.
+Controller availability and controller commissioning are intentionally separate concepts. The presence of a controller or estimator implementation does **not** mean that path is runtime-validated or physically commissioned.
 
 Controllers operate behind a common state, safety, and actuator interface. A control mode can select a policy and compute an actuator request without gaining direct access to the motor.
 
@@ -112,7 +112,7 @@ Operator Intent
 
 The **Control State Machine** owns controller-selection and mode-transition authority. The **Motor Authority Arbiter** owns physical actuator command authority. These responsibilities must not be conflated.
 
-Motor authority is treated as an explicitly owned resource with `NONE / MAINTENANCE / CONTROL / FAULT` semantics. The current automatic path intentionally ends at an **unbound motor sink**; the bounded maintenance path is currently the only software path that can reach the physical motor.
+Motor authority is treated as an explicitly owned resource with `NONE / MAINTENANCE / CONTROL / FAULT` semantics.
 
 ### Safe-state contract
 
@@ -164,14 +164,12 @@ Only hardware properties that directly shape the control architecture are summar
 - **Controller module:** Forest S1 with STM32F103C8T6 at 72 MHz, using bare-metal libopencm3.
 - **Plant:** Forest D1 rotary inverted pendulum, 2016 hardware baseline.
 - **Pendulum sensing:** analog angle sensor on **PA7 / ADC1_IN7**.
-- **Rotary-arm sensing:** quadrature encoder; current firmware reference is **1040 counts per output-shaft revolution**, pending final specimen-level control validation.
+- **Rotary-arm sensing:** quadrature encoder; legacy hardware documentation specifies **1040 counts per output-shaft revolution**.
 - **Actuation:** TB6612FNG H-bridge driving the rotary-arm DC motor.
 - **Motor / gearing:** nominal 12 V DC motor with 1:20 gearbox on the original Forest mechanism.
 - **Control timing:** 1 kHz firmware timing baseline.
 
-The Forest S1 controller module remains the immediate target because it plugs directly into the existing Forest D1 baseboard. Pin-level wiring, user-interface connections, OLED signals, maintenance UART details, electrical notes, and validation checklists are kept in [Forest D1 2016 hardware baseline](docs/hardware/forest-d1-2016-baseline.md).
-
-A **Raspberry Pi Pico 2 / RP2350** port, including native USB HID and CDC, is a planned later platform and is not implemented on `main`.
+The Forest S1 controller module is the direct-fit baseline for the existing Forest D1 baseboard. Pin-level wiring, user-interface connections, OLED signals, maintenance UART details, electrical notes, and validation checklists are kept in [Forest D1 2016 hardware baseline](docs/hardware/forest-d1-2016-baseline.md).
 
 ## Validation model
 
@@ -202,30 +200,12 @@ Communication remains outside the control core.
               +-----------+-----------+
               |                       |
               v                       v
-      Text maintenance         Micro XRCE-DDS
-       bring-up / debug        ROS 2 / DDS path
+      Maintenance transport     ROS 2 / DDS integration
 ```
 
-The current target uses a text UART maintenance interface for commissioning, bounded motor commands, low-rate telemetry, and RAM-only runtime parameter changes. **Micro XRCE-DDS** is reserved as a measured feasibility milestone for structured higher-rate telemetry and ROS 2 / DDS integration; it is not part of the current firmware image.
-
-The first XRCE-DDS scope is intended to remain low risk: telemetry and disarmed-only parameter access. Remote motor arm is explicitly excluded from the initial integration. **ROS 2 connectivity must not implicitly confer actuator authority.**
+Transport and middleware must remain outside controller logic and must not implicitly confer actuator authority.
 
 See [Communication and Parameter Architecture](docs/architecture/communications.md).
-
-## Commissioning tools
-
-The firmware provides bounded tools for establishing the plant properties required by the new control stack:
-
-| Tool | Purpose |
-|---|---|
-| `motor identify` | motor / encoder polarity |
-| `motor characterize` | breakaway and sustainable duty |
-| `motor response` | drive and coast-down dynamics |
-| `motor brake-response` | reverse-braking dynamics |
-
-Detailed thresholds, timing, CSV output, and scripting are kept in [Motor Commissioning and Characterization](docs/commissioning/motor-characterization.md).
-
-The initial firmware/control commissioning sequence is documented in [Firmware Commissioning](docs/commissioning/firmware-commissioning.md).
 
 ## Repository layout
 
@@ -233,8 +213,7 @@ The initial firmware/control commissioning sequence is documented in [Firmware C
 app/                    STM32 firmware application and system-level adapters
 cmake/                  Cross-compilation toolchain
 control/                Platform-independent estimator, safety, and control logic
-drivers/ssd1315/        Active SSD1315-class display driver for the Forest target
-drivers/ssd1306/        Legacy/reference SSD1306 implementation
+drivers/                 Display and peripheral drivers
 docs/architecture/      Source-coupled architecture and contracts
 docs/commissioning/     Firmware and plant commissioning procedures
 docs/hardware/          Schematic-derived hardware baselines and validation notes
@@ -243,7 +222,7 @@ docs/validation/        Evidence and capability-validation model
 docs/templates/         Reusable engineering templates
 platform/stm32f103/     STM32F103 board support and linker configuration
 tests/                  Host-side unit tests
-third_party/libopencm3/ Git submodule
+third_party/            External source dependencies
 tools/                  Reproducible validation and runtime tooling
 ```
 
@@ -278,8 +257,6 @@ cmake -S . -B build/host -G Ninja \
 cmake --build build/host
 ctest --test-dir build/host --output-on-failure
 ```
-
-The host suite covers control configuration, safety behavior, estimation, control-state contracts, gate/runtime adapters, motor authority, application adapters, display drivers, and other deterministic logic included by the current CMake configuration.
 
 ### STM32F103 firmware
 
