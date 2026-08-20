@@ -67,7 +67,7 @@ The estimator boundary supports interchangeable estimation strategies while keep
 
 The rotary inverted pendulum is treated as a **mode-dependent / hybrid control problem**, not as one controller expected to work over the entire state space.
 
-![Hybrid control mode transitions](docs/architecture/control-mode-transitions.svg)
+![Hybrid control mode transitions](docs/architecture/control-mode-transitions.png)
 
 The control state machine separates the large-angle swing-up problem from local upright stabilization. **SWING-UP** uses energy-based control to drive the pendulum toward the upright equilibrium. **TRANSITION** manages controller handover after the state enters the stabilization region. **STABILIZATION** applies a local stabilizing controller such as PD/PID, LQR, or integral-augmented LQI.
 
