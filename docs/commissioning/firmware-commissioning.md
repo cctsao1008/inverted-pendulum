@@ -1,6 +1,6 @@
 # Firmware Commissioning
 
-This guide covers commissioning of the re-engineered firmware/control stack on the known-working Forest S1 / D1 hardware baseline. It is not a generic product bring-up checklist; the purpose is to verify interfaces and control-relevant assumptions required by the new implementation.
+This guide covers commissioning of the re-engineered firmware/control stack on the current known-working reference hardware baseline. It is not a generic product bring-up checklist; the purpose is to verify interfaces and control-relevant assumptions required by the new implementation.
 
 ## Initial sequence
 
