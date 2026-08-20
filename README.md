@@ -67,31 +67,11 @@ The estimator boundary supports interchangeable estimation strategies while keep
 
 The rotary inverted pendulum is treated as a **mode-dependent / hybrid control problem**, not as one controller expected to work over the entire state space.
 
-```text
-pendulum hanging / low-energy state
-                |
-                v
-       ENERGY-BASED SWING-UP
-        inject / remove energy
-                |
-                v
-          capture region
-                |
-                v
-             CAPTURE
-       transition management
-                |
-                v
-       upright neighborhood
-          /      |      \
-         v       v       v
-       PD/PID    LQR     LQI
-          \      |      /
-                v
-             BALANCE
-```
+![Hybrid control mode transitions](docs/architecture/control-mode-transitions.svg)
 
-Energy-based swing-up addresses the large-angle nonlinear problem of bringing the pendulum toward the energy required for the upright equilibrium. Capture logic manages the transition into the local stabilizing region. PD/PID, LQR, and integral-augmented LQI belong to the upright stabilization side of the architecture.
+The control state machine separates the large-angle swing-up problem from local upright stabilization. **SWING-UP** uses energy-based control to drive the pendulum toward the upright equilibrium. **TRANSITION** manages controller handover after the state enters the stabilization region. **STABILIZATION** applies a local stabilizing controller such as PD/PID, LQR, or integral-augmented LQI.
+
+Transitions are state-dependent and reversible. Leaving the stabilization region returns control to swing-up, while a moderate loss of stabilization can return the system to the transition state. A detected fall bypasses transition and returns directly to swing-up.
 
 Controller availability and controller commissioning are intentionally separate concepts. The presence of a controller or estimator implementation does **not** mean that path is runtime-validated or physically commissioned.
 
@@ -118,7 +98,7 @@ Motor authority is treated as an explicitly owned resource with `NONE / MAINTENA
 
 Loss of valid control authority must converge toward a defined motor-safe condition rather than preserving the previous actuator command.
 
-Safe loss of authority may result from operator disable, invalid state, stale control output, runtime fault, authority conflict, watchdog expiration, or an independent emergency-stop path. Shutdown policy is enforced at the actuator-authority boundary so swing-up, capture, PID, LQR, and LQI share the same safety semantics.
+Safe loss of authority may result from operator disable, invalid state, stale control output, runtime fault, authority conflict, watchdog expiration, or an independent emergency-stop path. Shutdown policy is enforced at the actuator-authority boundary so swing-up, transition logic, and all stabilization controllers share the same safety semantics.
 
 The exact coast / brake / standby behavior belongs to the actuator and hardware contract rather than the controller itself.
 
