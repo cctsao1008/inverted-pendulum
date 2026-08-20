@@ -1,12 +1,12 @@
 # Rotary Inverted Pendulum
 
-Re-engineered embedded firmware and control software for the existing **Forest D1 rotary inverted pendulum**, using its original **Forest S1 STM32 controller module**.
+Re-engineered embedded firmware and control software for a **rotary inverted pendulum control platform**, with emphasis on measurable state estimation, hybrid control, explicit actuator authority, and progressive commissioning.
 
 > **A known-working plant is not the same thing as a known control system.**
 
-This project is not primarily about proving that an STM32 can balance an inverted pendulum. The historical Forest mechanism already demonstrated that the physical plant can work. The purpose of this repository is to rebuild that system into a **measurable, testable, safety-gated, and progressively commissionable embedded control platform**.
+This project is not primarily about proving that a microcontroller can balance an inverted pendulum. It rebuilds an existing working plant into a **measurable, testable, safety-gated, and progressively commissionable embedded control platform**.
 
-The current hardware baseline is the original **Forest D1 baseboard and mechanism with its Forest S1 STM32F103C8T6 controller module (2016 revision)**. Hardware facts, sensor calibration, plant behavior, control computation, and physical actuator authority are treated as separate engineering properties and are validated independently.
+The current reference hardware is a legacy STM32F103-based commercial rotary inverted pendulum system. Hardware facts, sensor calibration, plant behavior, control computation, and physical actuator authority are treated as separate engineering properties and are validated independently.
 
 Platform-independent control modules are developed and tested on the host before they are connected to real motor output.
 
@@ -25,7 +25,7 @@ Platform-independent control modules are developed and tested on the host before
    The new control stack proceeds from passive observation to bounded maintenance actuation, characterization, observe-only control, admission, authority, and only then physical closed-loop control.
 
 5. **Control logic remains platform-independent where practical**  
-   Estimation, safety, configuration, and controller logic are kept separate from STM32-specific I/O so deterministic behavior can be tested on the host.
+   Estimation, safety, configuration, and controller logic are kept separate from MCU-specific I/O so deterministic behavior can be tested on the host.
 
 6. **Unknown is an acceptable engineering state; assumption is not evidence**  
    Historical behavior, source-file existence, or a plausible inference is not promoted into a current validation claim without supporting evidence.
@@ -108,15 +108,15 @@ See [Control Architecture](docs/architecture/control_architecture.md).
 
 Only hardware properties that directly shape the control architecture are summarized here:
 
-- **Controller module:** Forest S1 with STM32F103C8T6 at 72 MHz, using bare-metal libopencm3.
-- **Plant:** Forest D1 rotary inverted pendulum, 2016 hardware baseline.
-- **Pendulum sensing:** analog angle sensor on **PA7 / ADC1_IN7**.
-- **Rotary-arm sensing:** quadrature encoder; legacy hardware documentation specifies **1040 counts per output-shaft revolution**.
+- **Reference controller:** STM32F103C8T6 at 72 MHz.
+- **Plant:** single-link rotary inverted pendulum driven through a geared DC rotary arm.
+- **Pendulum sensing:** analog angular-position sensor.
+- **Rotary-arm sensing:** quadrature encoder; the legacy hardware documentation specifies **1040 counts per output-shaft revolution**.
 - **Actuation:** TB6612FNG H-bridge driving the rotary-arm DC motor.
-- **Motor / gearing:** nominal 12 V DC motor with 1:20 gearbox on the original Forest mechanism.
+- **Motor / gearing:** nominal 12 V DC motor with 1:20 gearbox on the reference mechanism.
 - **Control timing:** 1 kHz firmware timing baseline.
 
-The Forest S1 controller module is the direct-fit baseline for the existing Forest D1 baseboard. Pin-level wiring, user-interface connections, OLED signals, maintenance UART details, electrical notes, and validation checklists are kept in [Forest D1 2016 hardware baseline](docs/hardware/forest-d1-2016-baseline.md).
+The current reference implementation uses the original commercial hardware as a direct-fit development platform. Pin-level wiring, board-specific interfaces, electrical notes, and validation details are kept in [Forest D1 2016 Hardware Baseline](docs/hardware/forest-d1-2016-baseline.md).
 
 ## Communication and ROS 2 integration
 
