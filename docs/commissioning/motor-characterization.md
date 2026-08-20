@@ -2,7 +2,7 @@
 
 This document contains the bounded motor/encoder experiments used to establish control-relevant plant properties for the re-engineered control stack.
 
-The Forest S1 / D1 hardware is a known-working product baseline. These procedures are not basic hardware proof; they measure properties the new controller must know explicitly.
+The current reference hardware has a known-working product history. These procedures are not basic hardware proof; they measure properties the new controller must know explicitly.
 
 ## Command summary
 
@@ -83,7 +83,7 @@ Manual recording is also supported through `script begin`, whitelisted `motor br
 
 ## Interpretation
 
-These measurements are inputs to the new control architecture, not proof that the original Forest hardware was previously non-functional.
+These measurements are inputs to the new control architecture, not proof that the legacy product hardware was previously non-functional.
 
 ```text
 known-working product hardware
