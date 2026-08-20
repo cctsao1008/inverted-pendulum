@@ -1,10 +1,10 @@
 # Validation and Evidence Model
 
-The repository separates evidence about the historical Forest product, the current implementation, and physical commissioning. Source-file existence or a plausible assumption is not treated as equivalent to measured behavior.
+The repository separates evidence about the legacy reference product, the current implementation, and physical commissioning. Source-file existence or a plausible assumption is not treated as equivalent to measured behavior.
 
 ## Evidence vocabulary
 
-- **LEGACY-VALIDATED** — behavior known to have worked on the original Forest product or historical firmware; useful as reference, but not proof of the current implementation.
+- **LEGACY-VALIDATED** — behavior known to have worked on the legacy reference product or historical firmware; useful as reference, but not proof of the current implementation.
 - **DOC** — supported by schematic, datasheet, vendor material, or another controlled document.
 - **CODE** — implemented in the current repository.
 - **MEASURED** — observed on the current physical specimen.
@@ -38,7 +38,7 @@ These labels describe implementation/commissioning maturity rather than evidence
 
 ## Why the distinction matters
 
-The Forest S1 / D1 platform is a known-working product baseline. That historical fact prevents the project from being misrepresented as unknown-hardware bring-up, but it does not make the re-engineered firmware or controller automatically correct.
+The current reference hardware has a known-working commercial product history. That historical fact prevents the project from being misrepresented as unknown-hardware bring-up, but it does not make the re-engineered firmware or controller automatically correct.
 
 Likewise, control-relevant plant properties are re-measured because the new architecture must not inherit undocumented assumptions about polarity, reference, dead zone, dynamics, saturation, or braking behavior.
 
