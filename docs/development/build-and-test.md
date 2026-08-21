@@ -5,8 +5,8 @@
 Clone with the libopencm3 submodule:
 
 ```bash
-git clone --recursive https://github.com/cctsao1008/inverted-pendulum.git
-cd inverted-pendulum
+git clone --recursive https://github.com/cctsao1008/rotary-inverted-pendulum.git
+cd rotary-inverted-pendulum
 ```
 
 For an existing clone:
@@ -51,8 +51,8 @@ cmake --build build/stm32f103
 Expected outputs:
 
 ```text
-build/stm32f103/inverted-pendulum.elf
-build/stm32f103/inverted-pendulum.hex
-build/stm32f103/inverted-pendulum.bin
-build/stm32f103/inverted-pendulum.map
+build/stm32f103/rotary-inverted-pendulum.elf
+build/stm32f103/rotary-inverted-pendulum.hex
+build/stm32f103/rotary-inverted-pendulum.bin
+build/stm32f103/rotary-inverted-pendulum.map
 ```
