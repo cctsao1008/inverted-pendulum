@@ -1,4 +1,4 @@
-set(TARGET_NAME inverted-pendulum)
+set(TARGET_NAME rotary-inverted-pendulum)
 
 set(PLATFORM_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(LIBOPENCM3_DIR ${PROJECT_SOURCE_DIR}/third_party/libopencm3)
