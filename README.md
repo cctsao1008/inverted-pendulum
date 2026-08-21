@@ -111,7 +111,9 @@ The rotary inverted pendulum is treated as a **mode-dependent / hybrid control p
 
 ![Hybrid control mode transitions](docs/architecture/control-mode-transitions.png)
 
-The control state machine separates the large-angle swing-up problem from local upright stabilization. **SWING-UP** uses energy-based control to drive the pendulum toward the upright equilibrium. **TRANSITION** manages controller handover after the state enters the stabilization region. **STABILIZATION** applies a local stabilizing controller such as PD/PID, LQR, or integral-augmented LQI.
+The control state machine separates the large-angle swing-up problem from local upright stabilization. **SWING-UP** uses energy-based control to drive the pendulum toward the upright equilibrium. **TRANSITION** manages controller handover after the state enters the stabilization region. **STABILIZATION** applies a local stabilizing controller such as PD/PID, pole placement, LQR, or integral-augmented LQI.
+
+The local controller baselines serve different engineering roles: PD/PID provides an intuitive commissioning baseline, pole placement provides a direct model-sanity check against the identified linearized plant, and LQR provides the primary state-feedback trade-off between regulation and control effort. The practical stabilization basin is measured rather than inferred from a nominal upright simulation, and later becomes evidence for capture/transition design.
 
 Transitions are state-dependent and reversible. Leaving the stabilization region returns control to swing-up, while a moderate loss of stabilization can return the system to the transition state. A detected fall bypasses transition and returns directly to swing-up.
 
