@@ -10,19 +10,6 @@ The current reference hardware is a legacy STM32F103-based commercial rotary inv
 
 Platform-independent control modules are developed and tested on the host before they are connected to real motor output.
 
-## Current status
-
-The project is currently in **physical characterization and pre-closed-loop commissioning**.
-
-- The embedded runtime and 1 kHz timing baseline are operational.
-- Sensor acquisition and control-domain interfaces are implemented; physical calibration and coordinate validation remain commissioning work.
-- Bounded maintenance motor actuation is available through the explicit motor-authority path.
-- Automatic closed-loop motor output remains intentionally **unbound**.
-- Plant characterization, system identification, and model validation precede aggressive controller tuning.
-- Physical closed-loop balance is not considered commissioned until the required admission, run-permit, actuator-safety, and emergency-stop evidence exists.
-
-The detailed acceptance sequence is tracked in [Commissioning roadmap — hardware-to-hybrid-control validation gates](https://github.com/cctsao1008/rotary-inverted-pendulum/issues/48).
-
 ## Engineering and commissioning pipeline
 
 The development sequence is intentionally evidence-driven:
@@ -62,6 +49,8 @@ Upright Stabilization
 ```
 
 Raw measurements, fitted parameters, model revisions, and real-versus-model validation are treated as engineering evidence rather than informal tuning notes.
+
+Commissioning gates and their acceptance evidence are tracked in [Issue #48 — hardware-to-hybrid-control validation gates](https://github.com/cctsao1008/rotary-inverted-pendulum/issues/48).
 
 ## Design principles
 
