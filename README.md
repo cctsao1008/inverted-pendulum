@@ -10,6 +10,59 @@ The current reference hardware is a legacy STM32F103-based commercial rotary inv
 
 Platform-independent control modules are developed and tested on the host before they are connected to real motor output.
 
+## Current status
+
+The project is currently in **physical characterization and pre-closed-loop commissioning**.
+
+- The embedded runtime and 1 kHz timing baseline are operational.
+- Sensor acquisition and control-domain interfaces are implemented; physical calibration and coordinate validation remain commissioning work.
+- Bounded maintenance motor actuation is available through the explicit motor-authority path.
+- Automatic closed-loop motor output remains intentionally **unbound**.
+- Plant characterization, system identification, and model validation precede aggressive controller tuning.
+- Physical closed-loop balance is not considered commissioned until the required admission, run-permit, actuator-safety, and emergency-stop evidence exists.
+
+The detailed acceptance sequence is tracked in [Commissioning roadmap — hardware-to-swing-up validation gates](https://github.com/cctsao1008/rotary-inverted-pendulum/issues/48).
+
+## Engineering and commissioning pipeline
+
+The development sequence is intentionally evidence-driven:
+
+```text
+Hardware / I/O / Timing Baseline
+        ↓
+Sensor Calibration & Coordinate Convention
+        ↓
+Motor / Actuator Characterization
+        ↓
+Pendulum Free-Response Characterization
+        ↓
+System Identification & Model Validation
+        ↓
+State Estimation & Controller Baselines
+        ↓
+Upright Stabilization
+        ↓
+Energy-Based Swing-Up
+        ↓
+Capture / Transition / End-to-End Validation
+```
+
+This is a **commissioning order**, not the final runtime mode order. Upright stabilization is proven first from a manually positioned or otherwise safely captured state so that the stabilization basin, feedback signs, actuator limits, and safety path are known before swing-up is allowed to hand control over to it.
+
+The final hybrid runtime remains conceptually:
+
+```text
+Hanging / Low-Energy State
+        ↓
+Energy-Based Swing-Up
+        ↓
+Capture / Transition
+        ↓
+Upright Stabilization
+```
+
+Raw measurements, fitted parameters, model revisions, and real-versus-model validation are treated as engineering evidence rather than informal tuning notes.
+
 ## Design principles
 
 1. **Measurement before control**  
@@ -114,7 +167,7 @@ Only hardware properties that directly shape the control architecture are summar
 - **Rotary-arm sensing:** quadrature encoder; the legacy hardware documentation specifies **1040 counts per output-shaft revolution**.
 - **Actuation:** TB6612FNG H-bridge driving the rotary-arm DC motor.
 - **Motor / gearing:** nominal 12 V DC motor with 1:20 gearbox on the reference mechanism.
-- **Control timing:** 1 kHz firmware timing baseline.
+- **Firmware timing baseline:** 1 kHz scheduler / acquisition / control-pipeline tick. Final controller execution rates are selected from measured plant dynamics, actuator response, estimator behavior, and timing margin rather than assumed from MCU capability.
 
 The current reference implementation uses the original commercial hardware as a direct-fit development platform. Pin-level wiring, board-specific interfaces, electrical notes, and validation details are kept in [Forest D1 2016 Hardware Baseline](docs/hardware/forest-d1-2016-baseline.md).
 
@@ -140,6 +193,7 @@ See [Communication and Parameter Architecture](docs/architecture/communications.
 ## Documentation
 
 - [Control Architecture](docs/architecture/control_architecture.md)
+- [Telemetry Schema](docs/architecture/telemetry_schema.md)
 - [Communication and Parameter Architecture](docs/architecture/communications.md)
 - [Forest D1 2016 Hardware Baseline](docs/hardware/forest-d1-2016-baseline.md)
 - [Commissioning Philosophy](docs/commissioning/commissioning-philosophy.md)
