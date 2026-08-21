@@ -151,7 +151,7 @@ See [Control Architecture](docs/architecture/control_architecture.md).
 Only hardware properties that directly shape the control architecture are summarized here:
 
 - **Reference controller:** STM32F103C8T6 at 72 MHz.
-- **Plant:** single-link rotary inverted pendulum driven through a geared DC rotary arm.
+- **Plant:** single-link rotary inverted pendulum with an actuated horizontal rotary arm driven by a geared DC motor.
 - **Pendulum sensing:** analog angular-position sensor.
 - **Rotary-arm sensing:** quadrature encoder; the legacy hardware documentation specifies **1040 counts per output-shaft revolution**.
 - **Actuation:** TB6612FNG H-bridge driving the rotary-arm DC motor.
