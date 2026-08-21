@@ -71,18 +71,18 @@ jobs:
 
       - name: Verify firmware artifacts
         run: |
-          test -s build/stm32f103/inverted-pendulum.elf
-          test -s build/stm32f103/inverted-pendulum.hex
-          test -s build/stm32f103/inverted-pendulum.bin
-          test -s build/stm32f103/inverted-pendulum.map
+          test -s build/stm32f103/rotary-inverted-pendulum.elf
+          test -s build/stm32f103/rotary-inverted-pendulum.hex
+          test -s build/stm32f103/rotary-inverted-pendulum.bin
+          test -s build/stm32f103/rotary-inverted-pendulum.map
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: inverted-pendulum-stm32f103
+          name: rotary-inverted-pendulum-stm32f103
           path: |
-            build/stm32f103/inverted-pendulum.elf
-            build/stm32f103/inverted-pendulum.hex
-            build/stm32f103/inverted-pendulum.bin
-            build/stm32f103/inverted-pendulum.map
+            build/stm32f103/rotary-inverted-pendulum.elf
+            build/stm32f103/rotary-inverted-pendulum.hex
+            build/stm32f103/rotary-inverted-pendulum.bin
+            build/stm32f103/rotary-inverted-pendulum.map
           if-no-files-found: error
