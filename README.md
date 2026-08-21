@@ -21,7 +21,7 @@ The project is currently in **physical characterization and pre-closed-loop comm
 - Plant characterization, system identification, and model validation precede aggressive controller tuning.
 - Physical closed-loop balance is not considered commissioned until the required admission, run-permit, actuator-safety, and emergency-stop evidence exists.
 
-The detailed acceptance sequence is tracked in [Commissioning roadmap — hardware-to-swing-up validation gates](https://github.com/cctsao1008/rotary-inverted-pendulum/issues/48).
+The detailed acceptance sequence is tracked in [Commissioning roadmap — hardware-to-hybrid-control validation gates](https://github.com/cctsao1008/rotary-inverted-pendulum/issues/48).
 
 ## Engineering and commissioning pipeline
 
